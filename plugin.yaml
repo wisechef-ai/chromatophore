@@ -1,0 +1,8 @@
+name: chromatophore
+version: 0.1.0
+description: Ambient session identity and state signalling, modelled on cuttlefish chromatophores
+author: wisechef-ai
+kind: standalone
+provides_hooks:
+  - on_session_start
+  - on_session_end
