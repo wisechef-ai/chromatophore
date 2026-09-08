@@ -30,11 +30,18 @@ from chromatophore.pattern import render                   # noqa: E402
 from chromatophore.session import Signal                   # noqa: E402
 from chromatophore.skinio import session_skin_name, write_skin  # noqa: E402
 
-from hermes_cli.skin_engine import (                       # noqa: E402
-    get_active_skin,
-    get_prompt_toolkit_style_overrides,
-    set_active_skin,
-)
+try:
+    from hermes_cli.skin_engine import (                   # noqa: E402
+        get_active_skin,
+        get_prompt_toolkit_style_overrides,
+        set_active_skin,
+    )
+except ImportError:
+    # This proof exercises the REAL skin engine on purpose; without Hermes there
+    # is nothing to prove, so skip rather than fake it. Exit 0 keeps `make test`
+    # honest on a machine that has the plugin but not the agent.
+    print("\n  SKIP: Hermes not importable — run inside the Hermes venv.\n")
+    sys.exit(0)
 
 failures = []
 
