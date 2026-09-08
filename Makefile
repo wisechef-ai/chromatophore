@@ -13,11 +13,13 @@ lint:
 test: lint
 	@python3 -m pytest tests/ -q
 	@python3 tests/proofs/live_repaint_proof.py
+	@python3 tests/proofs/running_app_proof.py
 
 # Needs the Hermes venv on the path; skipped rather than failed when absent, so
 # `make test` stays green on a machine without Hermes installed.
 proof:
 	@python3 tests/proofs/live_repaint_proof.py
+	@python3 tests/proofs/running_app_proof.py
 
 clean:
 	@find . -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null; true

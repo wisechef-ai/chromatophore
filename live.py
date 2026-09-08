@@ -42,8 +42,10 @@ We also repaint only when the palette actually CHANGES. Most ticks are no-ops.
 
 from __future__ import annotations
 
+import gc
 import logging
 import threading
+import weakref
 from typing import Callable, Optional
 
 from .pattern import Palette
@@ -74,62 +76,80 @@ def _skin_engine():
 def apply_palette_now(palette: Palette, skin_name: str) -> bool:
     """Write *palette* into the named skin and repaint the running CLI.
 
-    Returns True when a live application was found and repainted. False means the
-    colours are on disk and correct but nothing is currently displaying them (for
-    example during a non-interactive run) — not an error.
+    Returns True when a live CLI was found and restyled. False means the colours
+    are on disk and correct but nothing is currently displaying them (a
+    non-interactive run, for example) — not an error.
     """
     engine = _skin_engine()
     # Re-activating re-reads the YAML we just wrote; this is the step that makes
     # the change visible rather than merely persisted.
     engine.set_active_skin(skin_name)
 
-    app = _current_app()
-    if app is None:
+    # Resolve the CLI directly rather than via the "current" application.
+    # `get_app_or_none()` is context-dependent and returns None when no app is
+    # current — which is exactly the case on the worker thread that runs
+    # `on_session_start`, and that silently cost us the whole first paint.
+    cli = _find_cli()
+    if cli is None:
         return False
 
-    # prompt_toolkit's Application does not expose a documented way to rebuild
-    # Hermes' style dict, so we go through the CLI object that owns it when we can
-    # reach it, and fall back to invalidating so the next render picks up whatever
-    # the skin engine now holds.
-    cli = _owning_cli(app)
-    if cli is not None and hasattr(cli, "_apply_tui_skin_style"):
-        try:
-            return bool(cli._apply_tui_skin_style())
-        except Exception:  # pragma: no cover - defensive across Hermes versions
-            logger.debug("chromatophore: _apply_tui_skin_style failed", exc_info=True)
-
     try:
-        app.invalidate()
-        return True
-    except Exception:  # pragma: no cover
-        logger.debug("chromatophore: invalidate failed", exc_info=True)
+        # The Application is built ONCE per session (cli.py sets `self._app` in
+        # run()) and its style is resolved once with it, so ONLY this call makes
+        # a skin change visible. A bare invalidate() re-renders with the same
+        # style object and shows nothing.
+        return bool(cli._apply_tui_skin_style())
+    except Exception:  # pragma: no cover - defensive across Hermes versions
+        logger.debug("chromatophore: _apply_tui_skin_style failed", exc_info=True)
         return False
 
 
-def _current_app():
-    """The running prompt_toolkit Application, or None outside an interactive CLI."""
-    try:
-        from prompt_toolkit.application.current import get_app_or_none
-    except ImportError:  # pragma: no cover - prompt_toolkit is a Hermes dependency
-        return None
-    try:
-        return get_app_or_none()
-    except Exception:  # pragma: no cover
-        return None
+# Resolving the CLI needs a gc sweep, far too expensive to repeat on a timer.
+# One process hosts one CLI, so cache it weakly — this reference must never be
+# what keeps a dead CLI alive.
+_cli_ref: "weakref.ReferenceType | None" = None
 
 
-def _owning_cli(app) -> Optional[object]:
-    """Best-effort handle on the HermesCLI instance that built *app*.
+def _find_cli() -> Optional[object]:
+    """The live HermesCLI instance in this process, or None.
 
-    Hermes keeps no module-level CLI singleton, so we look for the back-reference
-    the application carries. This is intentionally best-effort: when it fails we
-    still repaint via invalidate(), just without the style rebuild.
+    Hermes exposes no module-level CLI singleton and the Application carries no
+    back-reference (checked: `_hermes_cli`, `hermes_cli`, `_cli` are all absent),
+    so we ask the garbage collector for the object that owns a prompt_toolkit
+    Application AND can rebuild its style. Deliberately independent of
+    prompt_toolkit's "current application" context, which is not set on the
+    worker thread Hermes uses for session hooks.
     """
-    for attr in ("_hermes_cli", "hermes_cli", "_cli"):
-        cli = getattr(app, attr, None)
-        if cli is not None:
+    global _cli_ref
+
+    if _cli_ref is not None:
+        cli = _cli_ref()
+        if cli is not None and getattr(cli, "_app", None) is not None:
             return cli
+        _cli_ref = None  # stale: the CLI went away
+
+    for obj in gc.get_objects():
+        try:
+            if (
+                getattr(obj, "_app", None) is not None
+                and hasattr(obj, "_apply_tui_skin_style")
+                and hasattr(obj, "_build_tui_style_dict")
+            ):
+                _cli_ref = weakref.ref(obj)
+                return obj
+        except Exception:
+            # Some objects raise on attribute access; they are not the CLI.
+            continue
     return None
+
+
+
+# Resolving the owning CLI needs a gc sweep, which is far too expensive to repeat
+# on a timer. One process hosts one CLI, so the answer is cached weakly: the
+# reference must never be what keeps a dead CLI alive.
+_cli_ref: "weakref.ReferenceType | None" = None
+
+
 
 
 class LiveRepainter:
