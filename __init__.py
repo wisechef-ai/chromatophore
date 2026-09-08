@@ -10,7 +10,7 @@ The plugin entrypoint Hermes looks for is `register(ctx)`, re-exported here from
 `chromatophore.plugin`.
 """
 
-from chromatophore.plugin import register
+from .plugin import register
 
 __all__ = ["register"]
 __version__ = "0.1.0"

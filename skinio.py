@@ -43,7 +43,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping
 
-from chromatophore.pattern import Palette
+from .pattern import Palette
 
 __all__ = [
     "skins_dir",

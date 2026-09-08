@@ -35,9 +35,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from chromatophore.color.identity import IdentityColor
-from chromatophore.color.oklab import OKLCh, oklch_to_hex
-from chromatophore.session import Signal
+from .color.identity import IdentityColor
+from .color.oklab import OKLCh, oklch_to_hex
+from .session import Signal
 
 __all__ = ["Palette", "render", "ACUTE_AMBER", "ACUTE_FAULT"]
 

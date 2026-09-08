@@ -46,7 +46,7 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from chromatophore.pattern import Palette
+from .pattern import Palette
 
 logger = logging.getLogger(__name__)
 

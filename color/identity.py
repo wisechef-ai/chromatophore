@@ -37,7 +37,7 @@ import hashlib
 from dataclasses import dataclass
 from typing import Iterable, Sequence
 
-from chromatophore.color.oklab import (
+from .oklab import (
     OKLCh,
     delta_e_ok,
     gamut_map,

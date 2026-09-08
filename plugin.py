@@ -25,11 +25,11 @@ from __future__ import annotations
 import logging
 from typing import Any, Optional
 
-from chromatophore.color.identity import allocate
-from chromatophore.live import DEFAULT_INTERVAL, LiveRepainter, apply_palette_now
-from chromatophore.pattern import render
-from chromatophore.session import Signal, snapshot
-from chromatophore.skinio import remove_skin, session_skin_name, sweep_orphans, write_skin
+from .color.identity import allocate
+from .live import DEFAULT_INTERVAL, LiveRepainter, apply_palette_now
+from .pattern import render
+from .session import Signal, snapshot
+from .skinio import remove_skin, session_skin_name, sweep_orphans, write_skin
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ def _cli_setup(parser) -> None:
 
 
 def _cli_handler(args) -> int:
-    from chromatophore.cli import run_doctor, run_legend, run_watch
+    from .cli import run_doctor, run_legend, run_watch
 
     cmd = getattr(args, "chroma_cmd", None) or "watch"
     if cmd == "legend":

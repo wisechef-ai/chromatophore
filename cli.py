@@ -15,9 +15,9 @@ import os
 import sys
 import time
 
-from chromatophore.color.identity import allocate
-from chromatophore.naming import session_name
-from chromatophore.session import Signal, snapshot
+from .color.identity import allocate
+from .naming import session_name
+from .session import Signal, snapshot
 
 __all__ = ["run_watch", "run_legend", "run_doctor"]
 
