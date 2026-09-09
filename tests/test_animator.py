@@ -239,17 +239,48 @@ def test_background_tint_can_be_switched_off():
     assert "background" not in recorder.durable_writes[0][1]
 
 
-def test_background_tint_is_on_by_default_and_is_near_black():
-    """Adam, 2026-09-09: the session background should be cuttlefish-black. Near
-    black means low luminance; "this session's" means it is not pure #000000."""
+def test_background_tint_is_on_by_default_and_is_a_dark_session_colour():
+    """The background is dark enough to read on, and is THIS session's colour.
+
+    The lightness ceiling was 0.25 when the ground was near-black. It is 0.26 now
+    (Adam, 2026-09-09: "the background has to take-over the work of
+    differentiation between sessions too") because chroma saturates at these
+    lightnesses and only L keeps buying separation. The contract that matters is
+    not a magic number but the pair below: dark enough for light text, coloured
+    enough to be an identity.
+    """
     from cuttlefish_theme.color.oklab import hex_to_oklch
+    from cuttlefish_theme.color.terminal import contrast_ratio
 
     recorder = Recorder()
     animator = _animator(recorder, [_palette()])
     animator.tick_once()
     ground = recorder.durable_writes[0][1]["background"]
-    assert hex_to_oklch(ground).L < 0.25
+    oklch = hex_to_oklch(ground)
+    assert oklch.L < 0.34, "background must stay a dark terminal"
+    assert oklch.C > 0.03, "background must carry the session hue, not be grey"
     assert ground.lower() != "#000000"
+    # Body text must remain comfortable on it, well past WCAG AA.
+    assert contrast_ratio("#E8E6EA", ground) > 9.0
+
+
+def test_two_sessions_get_visibly_different_backgrounds():
+    """The background is now a PRIMARY identity channel, not a tint.
+
+    The banner scrolls out of the transcript; the window does not. Six sessions
+    used to land 0.0148 OKLab apart — ten times below the identity separation
+    floor, i.e. six blacks. This pins the improvement so a future palette tweak
+    cannot quietly undo it.
+    """
+    from cuttlefish_theme.color.identity import allocate_many
+    from cuttlefish_theme.color.oklab import delta_e_ok, hex_to_oklch
+    from cuttlefish_theme.palette import build_palette
+
+    grounds = [hex_to_oklch(build_palette(i.oklch)["background"])
+               for i in allocate_many([f"s{n}" for n in range(6)])]
+    worst = min(delta_e_ok(a, b)
+                for i, a in enumerate(grounds) for b in grounds[i + 1:])
+    assert worst > 0.025, f"backgrounds are indistinguishable: {worst:.4f}"
 
 
 def test_two_sessions_get_distinguishable_grounds():

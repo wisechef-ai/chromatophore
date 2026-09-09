@@ -96,6 +96,7 @@ KEY_FANOUT: Mapping[str, int] = {
     # left the session panel painting stock gold. The live-repaint proof caught
     # it. Two ways to be reachable: a style-class template, or a direct read.
     "ui_accent": 0,        # cli_session_mixin.py:231 — session panel accent
+    "banner_border": 0,    # banner.py:913 via _skin_color() — the panel frame
     "ui_primary": 0,       # journey.py:29
     "response_border": 0,  # cli_chat_turn_mixin.py:602
     "session_border": 0, "session_label": 0,
@@ -212,31 +213,42 @@ def build_palette(
     # shade of calm. The wash is partial (the identity hue still shows through
     # in the ground and the borders) because blanching COVERS identity, it never
     # destroys it — the animal recovers its exact prior pattern afterwards.
-    ground_h, ground_c = h, _clamp(identity.C * 0.16, 0.022, 0.034)
-    bar_h, bar_c = h, _clamp(identity.C * 0.22, 0.028, 0.055)
+    ground_h, ground_c = h, _clamp(identity.C * 0.55, 0.055, 0.095)
+    bar_h, bar_c = h, _clamp(identity.C * 0.70, 0.070, 0.115)
     if signalling:
         ground_h = _mix_hue(h, sheen.h, 0.55)
         ground_c = _clamp(ground_c * 1.8, 0.020, 0.045)
         bar_h = _mix_hue(h, sheen.h, 0.70)
         bar_c = _clamp(bar_c * 2.0, 0.030, 0.075)
 
-    # L 0.20: the photographs measure a ground of L 0.245-0.310, but that
-    # includes lit sand and the animal's mid-tones. The DARKEST third of the
-    # mantle is what a terminal background is analogous to, so we sit just under
-    # the measured floor - dark enough to read as black on any terminal, light
-    # enough that the identity hue is actually visible in it.
-    ground = OKLCh(0.200, ground_c, ground_h)
+    # L 0.26, and the LIGHTNESS is the load-bearing number here, not the chroma.
+    #
+    # Adam, 2026-09-09: "the background has to take-over the work of
+    # differentiation between sessions too" — the banner scrolls out of the
+    # transcript, so the window itself is the only permanent identity channel.
+    # The previous ground (L 0.20, C<=0.034) put six sessions 0.0148 OKLab apart:
+    # ten times below the identity separation floor, i.e. six blacks.
+    #
+    # Swept L x chroma against the real gamut (see git history for the table):
+    # chroma SATURATES around 3x because sRGB cannot hold it at low lightness, so
+    # pushing chroma alone stops helping at 0.0216. Lightness keeps paying:
+    #   L 0.20 -> worst pair 0.0216, text contrast 14.4
+    #   L 0.26 -> worst pair 0.0264, text contrast 12.3
+    #   L 0.30 -> worst pair 0.0302, text contrast 10.7
+    # 0.26 takes +22% separation for 2 points of contrast we do not need (WCAG AA
+    # wants 4.5). It still reads as a dark terminal, which is the constraint.
+    ground = OKLCh(0.260, ground_c, ground_h)
     ground_hex = oklch_to_hex(ground)
 
     # Bars sit slightly above the ground so they read as a surface ON the skin
     # rather than a hole in it.
-    bar = OKLCh(0.225 if not signalling else 0.245, bar_c, bar_h)
+    bar = OKLCh(0.315 if not signalling else 0.335, bar_c, bar_h)
     bar_hex = oklch_to_hex(bar)
-    menu = OKLCh(0.205, _clamp(bar_c * 0.85, 0.018, 0.060), bar_h)
+    menu = OKLCh(0.290, _clamp(bar_c * 0.85, 0.045, 0.100), bar_h)
     menu_hex = oklch_to_hex(menu)
-    menu_sel = OKLCh(0.315, _clamp(bar_c * 1.5, 0.030, 0.090), bar_h)
+    menu_sel = OKLCh(0.400, _clamp(bar_c * 1.4, 0.060, 0.130), bar_h)
     menu_sel_hex = oklch_to_hex(menu_sel)
-    menu_meta = OKLCh(0.185, _clamp(bar_c * 0.7, 0.014, 0.050), bar_h)
+    menu_meta = OKLCh(0.270, _clamp(bar_c * 0.7, 0.035, 0.085), bar_h)
     menu_meta_hex = oklch_to_hex(menu_meta)
 
     # --- text: read for hours, so chroma stays low --------------------------
