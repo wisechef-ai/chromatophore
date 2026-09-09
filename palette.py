@@ -299,6 +299,12 @@ def build_palette(
 
         # CLI surfaces that read the skin directly
         "response_border": oklch_to_hex(border),
+        # banner_border paints the startup panel frame (banner.py:913) and the
+        # response box. It was missing from the first probe because it is read
+        # through _skin_color(), a THIRD reachability path alongside style
+        # classes and get_color() — and its absence left a stock bronze #CD7F32
+        # rule on screen after everything else was themed.
+        "banner_border": oklch_to_hex(border),
         "session_border": oklch_to_hex(border),
         "session_label": accent_hex,
         "selection_bg": menu_sel_hex,
