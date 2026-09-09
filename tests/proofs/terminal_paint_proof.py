@@ -23,6 +23,7 @@ Exits non-zero if the terminal is still painting stock Hermes gold.
 """
 
 import os
+import pathlib
 import pty
 import re
 import select
@@ -138,30 +139,29 @@ check("the terminal is NOT painting stock Hermes gold", not stock_hits,
 check("colours beyond the stock palette are present", len(ours) >= 4,
       f"{len(ours)} non-stock: {ours[:8]}")
 
-# The theme's signature: a near-black ground and a vivid accent, both carrying
-# one hue. Checked structurally rather than against fixed hexes, because the
-# colours are per-session by design.
+# The theme's signature: a near-black ground and a vivid accent. Checked
+# structurally, not against fixed hexes, because the colours are per-session.
 try:
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "..", ".."))
+    # The repo dir is the package AND may contain a hyphen, so bind the module
+    # name explicitly — importing by basename fails. Same shape as the other proofs.
     import importlib.util
-    import pathlib
-    root = pathlib.Path(__file__).resolve().parents[2]
+
+    _root = pathlib.Path(__file__).resolve().parents[2]
     if "cuttlefish_theme" not in sys.modules:
-        spec = importlib.util.spec_from_file_location(
-            "cuttlefish_theme", root / "__init__.py",
-            submodule_search_locations=[str(root)])
-        mod = importlib.util.module_from_spec(spec)
-        mod.__path__ = [str(root)]
-        sys.modules["cuttlefish_theme"] = mod
-        spec.loader.exec_module(mod)
+        _spec = importlib.util.spec_from_file_location(
+            "cuttlefish_theme", _root / "__init__.py",
+            submodule_search_locations=[str(_root)])
+        _mod = importlib.util.module_from_spec(_spec)
+        _mod.__path__ = [str(_root)]
+        sys.modules["cuttlefish_theme"] = _mod
+        _spec.loader.exec_module(_mod)
     from cuttlefish_theme.color.oklab import hex_to_oklch
 
-    dark = [c for c in ours if hex_to_oklch(c).L < 0.32]
-    vivid = [c for c in ours if hex_to_oklch(c).C > 0.12]
-    check("a near-black ground is on screen", bool(dark), f"{dark[:4]}")
-    check("a vivid accent is on screen", bool(vivid), f"{vivid[:4]}")
-except Exception as exc:  # pragma: no cover
+    check("a near-black ground is on screen",
+          any(hex_to_oklch(c).L < 0.32 for c in ours))
+    check("a vivid accent is on screen",
+          any(hex_to_oklch(c).C > 0.12 for c in ours))
+except Exception as exc:  # pragma: no cover - structure check is a bonus
     check("palette structure check ran", False, str(exc))
 
 print()

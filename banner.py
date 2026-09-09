@@ -94,26 +94,25 @@ def banner_hero(
     Rich markup rather than raw ANSI because `banner.py` hands this string to a
     Rich console, which would escape raw escape sequences.
     """
-    from .field import mottle, passing_cloud
+    from .field import _composite, mottle, passing_cloud
 
     field = mottle(width, height, seed=seed)
     if wave_t is not None:
         field = passing_cloud(field, wave_t, seed=seed)
 
-    from .field import _composite  # local: internal compositor, same as the CLI
-
-    pigment = hex_to_oklch(identity_hex)
-    sheen = hex_to_oklch(sheen_hex)
+    pigment, sheen = hex_to_oklch(identity_hex), hex_to_oklch(sheen_hex)
     base = hex_to_oklch(ground_hex)
 
-    lines = []
-    for y in range(0, field.height, 2):
-        parts = []
-        for x in range(field.width):
-            top = _composite(field.get(x, y), pigment, sheen, base)
-            bottom = (_composite(field.get(x, y + 1), pigment, sheen, base)
-                      if y + 1 < field.height else ground_hex)
-            # Rich paints the glyph in the foreground colour over the background.
-            parts.append(f"[{top} on {bottom}]\u2580[/]")
-        lines.append("".join(parts))
-    return "\n".join(lines)
+    def cell(x: int, y: int) -> str:
+        # Rich paints the glyph's foreground over the cell's background, so one
+        # half-block carries two independently coloured pixels — same trick as
+        # render_half_blocks(), in Rich markup instead of raw ANSI.
+        top = _composite(field.get(x, y), pigment, sheen, base)
+        bottom = (_composite(field.get(x, y + 1), pigment, sheen, base)
+                  if y + 1 < field.height else ground_hex)
+        return f"[{top} on {bottom}]\u2580[/]"
+
+    return "\n".join(
+        "".join(cell(x, y) for x in range(field.width))
+        for y in range(0, field.height, 2)
+    )

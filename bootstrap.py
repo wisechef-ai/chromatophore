@@ -125,10 +125,8 @@ def ensure_configured(*, apply: bool = True) -> dict:
                     "detail": "managed install; config is administrator-controlled"}
         cfg = config_mod.load_config() or {}
         display = cfg.get("display")
-        if not isinstance(display, dict):
-            display = {}
+        cfg["display"] = display = display if isinstance(display, dict) else {}
         display["skin"] = STABLE_SKIN
-        cfg["display"] = display
         config_mod.save_config(cfg)
         return {"state": "configured", "display_skin": STABLE_SKIN}
     except Exception as exc:
