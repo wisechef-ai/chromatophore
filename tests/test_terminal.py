@@ -13,8 +13,8 @@ import random
 
 import pytest
 
-from chromatophore.color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
-from chromatophore.color.terminal import (
+from cuttlefish_theme.color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
+from cuttlefish_theme.color.terminal import (
     contrast_ratio,
     distinguishable_under_cvd,
     ensure_contrast,
@@ -219,7 +219,7 @@ def test_simulate_cvd_preserves_luminance_order():
 
 
 def contrast_pair_distance(a_hex: str, b_hex: str) -> float:
-    from chromatophore.color.oklab import delta_e_ok
+    from cuttlefish_theme.color.oklab import delta_e_ok
 
     return delta_e_ok(hex_to_oklch(a_hex), hex_to_oklch(b_hex))
 
@@ -267,7 +267,7 @@ def random_identities(seed: int, n: int) -> list[OKLCh]:
     sRGB gamut, because the allocator only emits displayable identities;
     out-of-gamut inputs would conflate ensure_contrast's behaviour with
     the gamut mapper's chroma trimming."""
-    from chromatophore.color.oklab import in_srgb_gamut
+    from cuttlefish_theme.color.oklab import in_srgb_gamut
 
     rng = random.Random(seed)
     out: list[OKLCh] = []

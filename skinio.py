@@ -52,6 +52,7 @@ __all__ = [
     "remove_skin",
     "sweep_orphans",
     "BASE_DIALECT",
+    "write_colors",
 ]
 
 
@@ -59,10 +60,8 @@ __all__ = [
 # sepia/umber inks, iridophore teals and golds. These are the keys that do NOT
 # vary per session — the dialect every session speaks.
 #
-# `background` is deliberately absent. Setting it forces contrast revalidation
-# across ~40 inherited keys and fights the user's own terminal theme; omitting it
-# means every key we don't set inherits Hermes' default, which is the documented
-# behaviour and the safe one.
+# `background` is NOT here: it is per-session (the session's own near-black), so it
+# comes from `Palette.skin_colors()` rather than from the shared dialect.
 BASE_DIALECT: Mapping[str, str] = {
     "ui_text": "#E8E2D6",
     "banner_text": "#E8E2D6",
@@ -79,7 +78,7 @@ BASE_DIALECT: Mapping[str, str] = {
     "syntax_comment": "#6B6257",
 }
 
-_PREFIX = "chroma-"
+_PREFIX = "cuttle-"
 
 
 def skins_dir(hermes_home: str | os.PathLike[str] | None = None) -> Path:
@@ -131,27 +130,54 @@ def write_skin(
     *,
     hermes_home: str | os.PathLike[str] | None = None,
     extra: Mapping[str, Any] | None = None,
+    tint_background: bool = True,
+    durable: bool = True,
 ) -> Path:
     """Materialise *palette* into its session skin file, atomically.
 
     Returns the path written. The file is complete and valid at every instant an
     outside reader could observe it — see HAZARD 1 above.
     """
-    name = session_skin_name(palette.session_id)
+    colors = dict(BASE_DIALECT)
+    colors.update(palette.skin_colors(tint_background=tint_background))
+    if extra:
+        colors.update({k: str(v) for k, v in extra.items()})
+    return write_colors(
+        palette.session_id,
+        colors,
+        description=f"cuttlefish session {palette.session_id} ({palette.signal.value})",
+        hermes_home=hermes_home,
+        durable=durable,
+    )
+
+
+def write_colors(
+    session_id: str,
+    colors: Mapping[str, str],
+    *,
+    description: str = "",
+    hermes_home: str | os.PathLike[str] | None = None,
+    durable: bool = True,
+) -> Path:
+    """Atomically write a raw colour mapping as this session's skin.
+
+    The animation path needs this: an in-flight transition frame is an arbitrary
+    interpolated palette, not a `Palette` dataclass.
+
+    ``durable=False`` skips the fsync. That is safe and deliberate for intermediate
+    animation frames: **atomicity comes from os.replace, not from fsync**, so a
+    concurrent reader still sees either the whole old file or the whole new one and
+    HAZARD 1 is unaffected. fsync only buys crash *durability*, and the durable
+    thing to survive a crash is the final frame — which is always written with
+    ``durable=True``. Measured on this box the fsync costs ~4ms of an ~11.7ms
+    frame, so dropping it for in-flight frames is a third of the animation budget.
+    """
+    name = session_skin_name(session_id)
     directory = skins_dir(hermes_home)
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{name}.yaml"
 
-    colors = dict(BASE_DIALECT)
-    colors.update(palette.skin_colors())
-    if extra:
-        colors.update({k: str(v) for k, v in extra.items()})
-
-    body = _render_yaml(
-        name,
-        colors,
-        f"chromatophore session {palette.session_id} ({palette.signal.value})",
-    )
+    body = _render_yaml(name, colors, description or f"cuttlefish session {session_id}")
 
     # Same directory as the target: os.replace is only atomic within a filesystem,
     # and /tmp is frequently a different one.
@@ -160,10 +186,11 @@ def write_skin(
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(body)
             fh.flush()
-            # fsync before rename: without it a crash can leave the rename durable
-            # while the contents are not, producing an empty file — which parses to
-            # None and latches the default skin.
-            os.fsync(fh.fileno())
+            if durable:
+                # fsync before rename: without it a crash can leave the rename
+                # durable while the contents are not, producing an empty file —
+                # which parses to None and latches the default skin.
+                os.fsync(fh.fileno())
         os.replace(tmp_path, target)
     except BaseException:
         # Never leave a stray temp file behind, including on KeyboardInterrupt.
@@ -199,7 +226,7 @@ def sweep_orphans(
     """Delete our skin files whose sessions are gone. Returns what was removed.
 
     This is the crash-recovery path: `kill -9` skips session-end cleanup, so
-    something must reclaim those files later. Scoped to the `chroma-` prefix and to
+    something must reclaim those files later. Scoped to the `cuttle-` prefix and to
     regular files so a hand-written skin is never at risk.
     """
     directory = skins_dir(hermes_home)

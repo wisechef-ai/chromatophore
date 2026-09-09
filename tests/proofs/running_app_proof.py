@@ -22,17 +22,32 @@ import tempfile
 import threading
 import time
 
-HOME = tempfile.mkdtemp(prefix="chroma-app-proof-")
+HOME = tempfile.mkdtemp(prefix="cuttle-app-proof-")
 os.environ["HERMES_HOME"] = HOME
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 sys.path.insert(0, os.path.expanduser("~/.hermes/hermes-agent"))
 
-from chromatophore.color.identity import allocate            # noqa: E402
-from chromatophore.live import _find_cli, apply_palette_now  # noqa: E402
-from chromatophore.pattern import render                     # noqa: E402
-from chromatophore.session import Signal                     # noqa: E402
-from chromatophore.skinio import session_skin_name, write_skin  # noqa: E402
+import importlib.util  # noqa: E402
+
+_ROOT = pathlib.Path(__file__).resolve().parents[2]
+if "cuttlefish_theme" not in sys.modules:
+    # Bind the module name explicitly: the repo directory contains a hyphen, which
+    # is not a legal Python identifier, so importing by basename fails. Hermes'
+    # own plugin loader does exactly this (spec_from_file_location).
+    _spec = importlib.util.spec_from_file_location(
+        "cuttlefish_theme", _ROOT / "__init__.py",
+        submodule_search_locations=[str(_ROOT)])
+    _mod = importlib.util.module_from_spec(_spec)
+    _mod.__path__ = [str(_ROOT)]
+    sys.modules["cuttlefish_theme"] = _mod
+    _spec.loader.exec_module(_mod)
+
+from cuttlefish_theme.color.identity import allocate            # noqa: E402
+from cuttlefish_theme.live import _find_cli, apply_palette_now  # noqa: E402
+from cuttlefish_theme.pattern import render                     # noqa: E402
+from cuttlefish_theme.session import Signal                     # noqa: E402
+from cuttlefish_theme.skinio import session_skin_name, write_skin  # noqa: E402
 
 try:
     from prompt_toolkit.application import Application
@@ -89,7 +104,7 @@ class FakeHermesCLI:
         return True
 
 
-print("\nchromatophore — running-application repaint proof\n")
+print("\ncuttlefish-theme — running-application repaint proof\n")
 print(f"  isolated HERMES_HOME = {HOME}\n")
 
 SESSION = "20260908_181500_appproof"
@@ -98,7 +113,7 @@ ident = allocate(SESSION)
 
 with create_pipe_input() as inp:
     app = Application(
-        layout=Layout(Window(FormattedTextControl("chromatophore"))),
+        layout=Layout(Window(FormattedTextControl("cuttlefish"))),
         input=inp,
         output=DummyOutput(),
         style=Style.from_dict({"prompt": "#111111"}),

@@ -21,7 +21,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from chromatophore.session import (
+from cuttlefish_theme.session import (
     LiveSession,
     Signal,
     collapse,
@@ -270,7 +270,7 @@ class TestIsAliveLinux:
             [sys.executable, "-c", "import time; time.sleep(30)"]
         )
         try:
-            from chromatophore.session import _proc_start_time
+            from cuttlefish_theme.session import _proc_start_time
 
             actual = _proc_start_time(other.pid)
             if actual is None:
@@ -287,7 +287,7 @@ class TestIsAliveLinux:
     def test_same_start_time_within_tolerance(self):
         # Registry pins psutil-style floats; /proc quantises to ticks. A small
         # delta must still count as the same process.
-        from chromatophore.session import _proc_start_time
+        from cuttlefish_theme.session import _proc_start_time
 
         actual = _proc_start_time(os.getpid())
         if actual is None:

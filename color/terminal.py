@@ -1,6 +1,6 @@
 """Terminal-rendering safety layer: quantization, CVD simulation, WCAG contrast.
 
-Why this module exists: everything else in `chromatophore` reasons about exact,
+Why this module exists: everything else in `cuttlefish_theme` reasons about exact,
 float-precision OKLCh colours — but a terminal can only *display* a small fixed
 palette (256 colours at best) through the eyes of a human, some of whom have
 colour-vision deficiency (CVD), on backgrounds we do not control. This module

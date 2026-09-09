@@ -17,7 +17,7 @@ import tempfile
 import time
 
 # Isolate: never touch the developer's real ~/.hermes.
-HOME = tempfile.mkdtemp(prefix="chroma-live-proof-")
+HOME = tempfile.mkdtemp(prefix="cuttle-live-proof-")
 os.environ["HERMES_HOME"] = HOME
 
 # The package root is this repo's PARENT (Hermes loads the plugin dir AS the
@@ -25,10 +25,25 @@ os.environ["HERMES_HOME"] = HOME
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[3]))
 sys.path.insert(0, os.path.expanduser("~/.hermes/hermes-agent"))
 
-from chromatophore.color.identity import allocate          # noqa: E402
-from chromatophore.pattern import render                   # noqa: E402
-from chromatophore.session import Signal                   # noqa: E402
-from chromatophore.skinio import session_skin_name, write_skin  # noqa: E402
+import importlib.util  # noqa: E402
+
+_ROOT = pathlib.Path(__file__).resolve().parents[2]
+if "cuttlefish_theme" not in sys.modules:
+    # Bind the module name explicitly: the repo directory contains a hyphen, which
+    # is not a legal Python identifier, so importing by basename fails. Hermes'
+    # own plugin loader does exactly this (spec_from_file_location).
+    _spec = importlib.util.spec_from_file_location(
+        "cuttlefish_theme", _ROOT / "__init__.py",
+        submodule_search_locations=[str(_ROOT)])
+    _mod = importlib.util.module_from_spec(_spec)
+    _mod.__path__ = [str(_ROOT)]
+    sys.modules["cuttlefish_theme"] = _mod
+    _spec.loader.exec_module(_mod)
+
+from cuttlefish_theme.color.identity import allocate          # noqa: E402
+from cuttlefish_theme.pattern import render                   # noqa: E402
+from cuttlefish_theme.session import Signal                   # noqa: E402
+from cuttlefish_theme.skinio import session_skin_name, write_skin  # noqa: E402
 
 try:
     from hermes_cli.skin_engine import (                   # noqa: E402
@@ -53,7 +68,7 @@ def check(label, condition, detail=""):
         failures.append(label)
 
 
-print("\nchromatophore — live repaint proof\n")
+print("\ncuttlefish-theme — live repaint proof\n")
 print(f"  isolated HERMES_HOME = {HOME}\n")
 
 SESSION = "20260908_170000_proof01"

@@ -67,23 +67,34 @@ class Palette:
     sheen_dim_hex: str
     # active ink
     ink_hex: str
+    # the mantle: near-black ground this session's skin sits on
+    ground_hex: str
     # acute layer, None when resting
     acute_hex: str | None
     label: str
     # provenance, for honest reporting in `watch` and diagnostics
     meta: dict[str, Any] = field(default_factory=dict)
 
-    def skin_colors(self) -> dict[str, str]:
+    def skin_colors(self, *, tint_background: bool = True) -> dict[str, str]:
         """Map onto Hermes skin keys.
 
-        Deliberately narrow. We touch the accent/prompt/border family (the sheen) and
-        leave `background` alone entirely: repainting the whole background per session
-        forces contrast revalidation across ~40 inherited keys and fights whatever
-        theme the user's terminal already has. A coloured edge reads as considered;
-        a tinted background reads as broken.
+        The background IS set (Adam, 2026-09-09: "the session background should be
+        like the cuttlefish — black, and a lot of pixels"). It carries the identity
+        hue at very low chroma, so the ground is unmistakably near-black while still
+        being *this* session's black. Sepia officinalis' mantle is not neutral grey;
+        it is a warm ink that takes the cast of whatever the animal is wearing.
+
+        `background` is a flat colour by construction — the skin schema has no
+        texture channel — so the "a lot of pixels" half of that requirement is
+        rendered by `field.py` into the banner and the watch board, where every cell
+        is genuinely ours. This method is the flat ground those pixels sit on, and
+        the two are derived from the same identity so they agree.
+
+        `tint_background=False` restores the v1 behaviour (chrome only) for users on
+        a light terminal or a strong terminal theme of their own.
         """
         sheen = self.acute_hex or self.sheen_hex
-        return {
+        colors = {
             "ui_accent": sheen,
             "banner_accent": sheen,
             "ui_border": self.sheen_dim_hex,
@@ -93,6 +104,15 @@ class Palette:
             "ui_tool": self.ink_hex,
             "banner_title": self.sheen_hex,
         }
+        if tint_background:
+            colors["background"] = self.ground_hex
+            # Surfaces that paint their OWN background must follow the ground, or
+            # they float as light rectangles on a dark mantle. These are the keys
+            # skin_engine templates with an explicit `bg:`.
+            colors["status_bar_bg"] = self.ground_hex
+            colors["completion_menu_bg"] = self.ground_hex
+            colors["voice_status_bg"] = self.ground_hex
+        return colors
 
 
 def _sheen(identity: OKLCh) -> OKLCh:
@@ -112,6 +132,18 @@ def _sheen_dim(identity: OKLCh) -> OKLCh:
     coherent, where a neutral grey border would sever it.
     """
     return identity.with_(L=max(0.30, identity.L - 0.22), C=identity.C * 0.55)
+
+
+def _ground(identity: OKLCh) -> OKLCh:
+    """The mantle: this session's near-black.
+
+    L 0.16 is dark enough to read as black next to any terminal's own background,
+    while C 0.022 is above the ~0.01 threshold at which a hue becomes detectable on
+    a large field — so two sessions side by side are visibly different blacks, and
+    neither looks like a coloured window. Hue is inherited from the identity, which
+    is what ties the ground to the chrome and the pixels.
+    """
+    return identity.with_(L=0.155, C=min(0.026, max(0.018, identity.C * 0.12)))
 
 
 def render(
@@ -150,6 +182,7 @@ def render(
         sheen_hex=oklch_to_hex(sheen),
         sheen_dim_hex=oklch_to_hex(dim),
         ink_hex=oklch_to_hex(base.with_(L=min(0.92, base.L + 0.14), C=base.C * 0.75)),
+        ground_hex=oklch_to_hex(_ground(base)),
         acute_hex=oklch_to_hex(acute) if acute is not None else None,
         label=label,
         meta={

@@ -1,18 +1,20 @@
-"""Hermes plugin entrypoint for chromatophore.
+"""Hermes plugin entrypoint for cuttlefish-theme.
 
 Everything here goes through the documented plugin surface — `register_cli_command`,
-`register_hook`, `register_command`. No Hermes core file is modified, which is both
+`register_hook`, `ctx.get_config`. No Hermes core file is modified, which is both
 the owner's constraint and upstream's own rule (plugins/AGENTS.md: "Plugins never
 touch core").
 
 Lifecycle:
 
-  session start -> allocate an identity against the currently-live sessions, write
-                   the session's skin, activate it, start the low-frequency repaint
-                   loop, and sweep any skins orphaned by an earlier crash.
-  during        -> the repaint loop re-evaluates every ~8s (0.125 Hz) and repaints
-                   ONLY when the resolved palette actually changed.
-  session end   -> stop the loop, restore the previous skin if we still own the
+  session start -> allocate an identity against the currently-live sessions, paint
+                   the mantle, SETTLE into it (the tortuous camouflage search), start
+                   the slow watcher, and sweep skins orphaned by an earlier crash.
+  during        -> the watcher checks every 2s and does nothing at all unless the
+                   state changed; when it does, the transition is ANIMATED
+                   (blanch on a new signal, recover on its release) and then the
+                   session is perfectly still again.
+  session end   -> stop the animator, restore the previous skin if we still own the
                    current one (compare-and-set), and delete our file.
 
 The compare-and-set on restore matters: if the user ran /skin themselves while we
@@ -26,23 +28,65 @@ import logging
 from typing import Any, Optional
 
 from .color.identity import allocate
-from .live import DEFAULT_INTERVAL, LiveRepainter, apply_palette_now
+from .live import DEFAULT_FPS, WATCH_INTERVAL, Animator, apply_palette_now
 from .pattern import render
 from .session import Signal, snapshot
 from .skinio import remove_skin, session_skin_name, sweep_orphans, write_skin
 
 logger = logging.getLogger(__name__)
 
-PLUGIN_NAME = "chromatophore"
+PLUGIN_NAME = "cuttlefish-theme"
 
 # Module state: one session per process, so a single slot is honest here rather
 # than a registry that implies multi-tenancy we do not have in the classic CLI.
 _state: dict[str, Any] = {
     "session_id": None,
-    "repainter": None,
+    "animator": None,
     "previous_skin": None,
     "identity": None,
 }
+
+# Defaults are the answers Adam gave on 2026-09-09. Every one is overridable via
+# `plugins.entries.cuttlefish-theme.settings.<key>` — a theme that cannot be turned
+# down is a theme people uninstall.
+_DEFAULTS = {
+    "animate": True,          # animate transitions (False = v1 snap behaviour)
+    "tint_background": True,  # per-session near-black mantle
+    "fps": DEFAULT_FPS,
+    "watch_interval": WATCH_INTERVAL,
+    "banner": True,           # print the pixel field at session start
+    "banner_height": 8,       # pixel rows (renders as half that in text rows)
+}
+
+
+def _settings(ctx=None) -> dict[str, Any]:
+    """Resolve settings, falling back to defaults for anything unset or malformed.
+
+    A bad value in config must not break the session — it degrades to the default
+    and logs. This runs inside session start, where an exception is very expensive.
+    """
+    values = dict(_DEFAULTS)
+    if ctx is None:
+        return values
+    for key, default in _DEFAULTS.items():
+        try:
+            raw = ctx.get_config(key, default)
+        except Exception:
+            continue
+        if raw is None:
+            continue
+        try:
+            if isinstance(default, bool):
+                values[key] = bool(raw)
+            elif isinstance(default, int) and not isinstance(default, bool):
+                values[key] = int(raw)
+            elif isinstance(default, float):
+                values[key] = float(raw)
+            else:
+                values[key] = raw
+        except (TypeError, ValueError):
+            logger.debug("cuttlefish: bad config for %s: %r", key, raw)
+    return values
 
 
 def _current_skin_name() -> Optional[str]:
@@ -74,10 +118,38 @@ def _compute_palette(session_id: str, signal: Signal = Signal.RESTING):
     return render(identity, signal, age_label=age)
 
 
-def on_session_start(session_id: str = "", **_kw) -> None:
-    """Claim an identity and begin the live loop."""
+def _print_banner(palette, height: int) -> None:
+    """Paint the session's chromatophore field once, at session start.
+
+    This is the "a lot of pixels" surface: the skin's 28 semantic keys are a
+    palette, not a canvas, so the real grid is text we emit at truecolor. Printed
+    once rather than kept live — the animal is static at rest, and so is this.
+    """
+    import shutil
+
+    from .field import mottle, render_half_blocks
+
+    try:
+        width = min(64, max(24, shutil.get_terminal_size((80, 24)).columns - 4))
+    except Exception:
+        width = 48
+    height = max(2, min(24, height))
+    field = mottle(width, height, seed=abs(hash(palette.session_id)) & 0xFFFFFFFF)
+    lines = render_half_blocks(
+        field,
+        pigment_hex=palette.identity_hex,
+        sheen_hex=palette.sheen_hex,
+        base_hex=palette.ground_hex,
+    )
+    for line in lines:
+        print(line)
+
+
+def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
+    """Claim an identity and settle into it."""
     if not session_id:
         return
+    settings = _settings(_ctx or _state.get("ctx"))
     _state["session_id"] = session_id
     _state["previous_skin"] = _current_skin_name()
 
@@ -86,39 +158,40 @@ def on_session_start(session_id: str = "", **_kw) -> None:
     try:
         sweep_orphans({s.session_id for s in snapshot()} | {session_id})
     except Exception:
-        logger.debug("chromatophore: orphan sweep failed", exc_info=True)
+        logger.debug("cuttlefish: orphan sweep failed", exc_info=True)
 
     skin_name = session_skin_name(session_id)
 
-    def _write(palette) -> None:
-        write_skin(palette)
-
-    repainter = LiveRepainter(
+    animator = Animator(
         compute=lambda: _compute_palette(session_id),
-        write=_write,
         skin_name=skin_name,
-        interval=DEFAULT_INTERVAL,
+        fps=settings["fps"],
+        watch_interval=settings["watch_interval"],
+        tint_background=settings["tint_background"],
+        animate=settings["animate"],
     )
-    _state["repainter"] = repainter
+    _state["animator"] = animator
 
     # Paint once synchronously so the session is already itself on the first
-    # prompt, rather than plain for the first 8 seconds.
+    # prompt, rather than plain until the first watch tick.
     try:
         palette = _compute_palette(session_id)
-        write_skin(palette)
+        write_skin(palette, tint_background=settings["tint_background"])
         apply_palette_now(palette, skin_name)
+        if settings["banner"]:
+            _print_banner(palette, settings["banner_height"])
     except Exception:
-        logger.debug("chromatophore: initial paint failed", exc_info=True)
+        logger.debug("cuttlefish: initial paint failed", exc_info=True)
 
-    repainter.start()
+    animator.start()
 
 
 def on_session_end(session_id: str = "", **_kw) -> None:
-    """Stop the loop and hand the terminal back exactly as we found it."""
-    repainter = _state.get("repainter")
-    if repainter is not None:
-        repainter.stop()
-    _state["repainter"] = None
+    """Stop the animator and hand the terminal back exactly as we found it."""
+    animator = _state.get("animator")
+    if animator is not None:
+        animator.stop()
+    _state["animator"] = None
 
     sid = session_id or _state.get("session_id")
     if not sid:
@@ -134,32 +207,43 @@ def on_session_end(session_id: str = "", **_kw) -> None:
 
             set_active_skin(previous)
         except Exception:
-            logger.debug("chromatophore: skin restore failed", exc_info=True)
+            logger.debug("cuttlefish: skin restore failed", exc_info=True)
 
     try:
         remove_skin(sid)
     except Exception:
-        logger.debug("chromatophore: skin cleanup failed", exc_info=True)
+        logger.debug("cuttlefish: skin cleanup failed", exc_info=True)
     _state["session_id"] = None
 
 
 def _cli_setup(parser) -> None:
-    sub = parser.add_subparsers(dest="chroma_cmd")
+    sub = parser.add_subparsers(dest="cuttle_cmd")
     watch = sub.add_parser("watch", help="Live board of every session and what it needs")
     watch.add_argument("--once", action="store_true", help="Render once and exit")
     watch.add_argument("--interval", type=float, default=2.0, help="Refresh seconds")
     sub.add_parser("legend", help="Explain the colour language")
     sub.add_parser("doctor", help="Diagnose terminal capability and current state")
+    demo = sub.add_parser("demo", help="Play the transition trajectories in the terminal")
+    demo.add_argument("--seconds", type=float, default=0.0,
+                      help="Cap the demo runtime (0 = play all trajectories once)")
+    skin = sub.add_parser("skin", help="Print this session's chromatophore field")
+    skin.add_argument("--height", type=int, default=16, help="Pixel rows")
+    skin.add_argument("--wave", action="store_true", help="Animate a passing cloud")
 
 
 def _cli_handler(args) -> int:
-    from .cli import run_doctor, run_legend, run_watch
+    from .cli import run_demo, run_doctor, run_legend, run_skin, run_watch
 
-    cmd = getattr(args, "chroma_cmd", None) or "watch"
+    cmd = getattr(args, "cuttle_cmd", None) or "watch"
     if cmd == "legend":
         return run_legend()
     if cmd == "doctor":
         return run_doctor()
+    if cmd == "demo":
+        return run_demo(seconds=getattr(args, "seconds", 0.0))
+    if cmd == "skin":
+        return run_skin(height=getattr(args, "height", 16),
+                        wave=getattr(args, "wave", False))
     return run_watch(once=getattr(args, "once", False),
                      interval=getattr(args, "interval", 2.0))
 
@@ -168,23 +252,24 @@ def register(ctx) -> None:
     """Wire the plugin into Hermes.
 
     Each registration is guarded independently: an older Hermes missing one surface
-    should lose that one feature, not the whole plugin. Chef currently runs a
-    different version from the workstation, so this is a real case, not theory.
+    should lose that one feature, not the whole plugin. Chef runs a different
+    version from the workstation, so this is a real case, not theory.
     """
+    _state["ctx"] = ctx
     try:
         ctx.register_cli_command(
-            "chromatophore",
+            "cuttlefish",
             help="Session colour identity and state signalling",
             setup_fn=_cli_setup,
             handler_fn=_cli_handler,
             description="Ambient session identity and intervention signalling.",
         )
     except Exception:
-        logger.debug("chromatophore: CLI registration unavailable", exc_info=True)
+        logger.debug("cuttlefish: CLI registration unavailable", exc_info=True)
 
     for hook, fn in (("on_session_start", on_session_start),
                      ("on_session_end", on_session_end)):
         try:
             ctx.register_hook(hook, fn)
         except Exception:
-            logger.debug("chromatophore: hook %s unavailable", hook, exc_info=True)
+            logger.debug("cuttlefish: hook %s unavailable", hook, exc_info=True)

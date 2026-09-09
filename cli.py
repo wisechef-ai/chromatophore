@@ -1,4 +1,4 @@
-"""`hermes chromatophore watch|legend|doctor` — the human-facing surfaces.
+"""`hermes cuttlefish watch|legend|doctor|demo|skin` — the human-facing surfaces.
 
 `watch` is the multiplexer: one line per live session, its identity colour, its
 short name, what it needs, and for how long. It is the surface where the whole
@@ -19,7 +19,7 @@ from .color.identity import allocate
 from .naming import session_name
 from .session import Signal, snapshot
 
-__all__ = ["run_watch", "run_legend", "run_doctor"]
+__all__ = ["run_watch", "run_legend", "run_doctor", "run_demo", "run_skin"]
 
 _RESET = "\033[0m"
 
@@ -104,7 +104,7 @@ def run_watch(*, once: bool = False, interval: float = 2.0) -> int:
             # Redraw in place rather than scrolling: this is a dashboard, and a
             # scrolling one is unreadable.
             sys.stdout.write("\033[H\033[2J" if color else "\n")
-            print(f"  chromatophore \u2014 {len(rows)} live\n")
+            print(f"  cuttlefish \u2014 {len(rows)} live\n")
             print("\n".join(rows))
             sys.stdout.flush()
             time.sleep(interval)
@@ -124,7 +124,7 @@ def run_legend() -> int:
         return f"{_truecolor(hex_color)}\u2588\u2588\u2588{_RESET}" if color else "###"
 
     print(f"""
-  chromatophore \u2014 the language
+  cuttlefish \u2014 the language
 
   Modelled on cuttlefish, which layer two kinds of pattern:
 
@@ -154,8 +154,150 @@ def run_legend() -> int:
 
   That is the entire language: one identity, three signals, one composition rule.
 
-  hermes chromatophore watch    every session at once
+  HOW IT MOVES
+
+    At rest, nothing moves. A cuttlefish holds its pattern; so does your terminal.
+    Motion happens only at transitions, each following a measured curve
+    (Woo et al., Nature 619, 2023):
+
+      blanch    0.4s   fast and direct, all at once      - a signal arrives
+      recover   2.4s   slower, decelerating, staggered   - the signal clears
+      settle    1.6s   meandering, pausing, converging   - a session begins
+
+    Pattern components regroup on every transition, so the same change never
+    animates the same way twice.
+
+  hermes cuttlefish watch    every session at once
+  hermes cuttlefish skin     this session's chromatophore field
+  hermes cuttlefish demo     watch the trajectories
 """)
+    return 0
+
+
+def _session_id_here() -> str:
+    """A session id for the surfaces that need one outside a live session.
+
+    Prefers the real environment, then the newest live session, then a stable
+    per-tty fallback so `skin`/`demo` stay reproducible when run standalone.
+    """
+    for var in ("HERMES_SESSION_ID", "HERMES_SESSION"):
+        value = os.environ.get(var)
+        if value:
+            return value
+    sessions = snapshot()
+    if sessions:
+        return sessions[-1].session_id
+    return f"tty-{os.environ.get('TERM', 'x')}-{os.getpid()}"
+
+
+def run_skin(*, height: int = 16, wave: bool = False) -> int:
+    """Print this session's chromatophore field: the pixels, at truecolor.
+
+    This is the surface the skin engine cannot provide. Its 28 keys are semantic
+    (`ui_error` must stay red), so the only place we can address individual pixels
+    is text we emit ourselves.
+    """
+    import shutil
+
+    from .field import (WAVE_HUNTING_HZ, mottle, passing_cloud,
+                        render_half_blocks)
+    from .pattern import render
+
+    if not _supports_color():
+        print("  (no truecolor here - nothing to show)")
+        return 0
+
+    session_id = _session_id_here()
+    ident = allocate(session_id)
+    palette = render(ident)
+    width = min(72, max(24, shutil.get_terminal_size((80, 24)).columns - 4))
+    height = max(2, min(48, height))
+    seed = abs(hash(session_id)) & 0xFFFFFFFF
+    base = mottle(width, height, seed=seed)
+
+    def paint(field) -> list[str]:
+        return render_half_blocks(
+            field,
+            pigment_hex=palette.identity_hex,
+            sheen_hex=palette.sheen_hex,
+            base_hex=palette.ground_hex,
+        )
+
+    if not wave:
+        print()
+        print(f"  {session_name(session_id)}  {palette.identity_hex}"
+              f"  ground {palette.ground_hex}")
+        print()
+        for line in paint(base):
+            print("  " + line)
+        print()
+        return 0
+
+    rows = (height + 1) // 2
+    print()
+    try:
+        start = time.monotonic()
+        first = True
+        while True:
+            t = time.monotonic() - start
+            lines = paint(passing_cloud(base, t, hz=WAVE_HUNTING_HZ, seed=seed))
+            if not first:
+                # Step back over what we drew; no clear-screen, so the wave plays
+                # in place without destroying the user's scrollback.
+                sys.stdout.write(f"\033[{rows}A")
+            first = False
+            sys.stdout.write("\n".join("  " + line for line in lines) + "\n")
+            sys.stdout.flush()
+            time.sleep(1 / 20.0)
+    except KeyboardInterrupt:
+        print()
+        return 0
+
+
+def run_demo(*, seconds: float = 0.0) -> int:
+    """Play each trajectory as a live colour bar, so the motion can be judged.
+
+    The point is to make the curves visible OUTSIDE a state change: blanch really
+    is abrupt, recover really does decelerate and stagger, settle really does pause
+    and resume. If those three do not feel different here, the constants are wrong.
+    """
+    from .morph import BLANCH, RECOVER, SETTLE, morph
+    from .pattern import render
+
+    if not _supports_color():
+        print("  (no truecolor here - nothing to show)")
+        return 0
+
+    session_id = _session_id_here()
+    ident = allocate(session_id)
+    calm = render(ident, Signal.RESTING).skin_colors()
+    alarm = render(ident, Signal.FAULT).skin_colors()
+    keys = sorted(k for k in calm if k in alarm)
+
+    runs = [
+        ("blanch   fault arrives ", BLANCH, calm, alarm),
+        ("recover  fault clears  ", RECOVER, alarm, calm),
+        ("settle   session begins", SETTLE, alarm, calm),
+    ]
+    began = time.monotonic()
+    print()
+    for label, trajectory, start_colors, target_colors in runs:
+        t0 = time.monotonic()
+        while True:
+            t = time.monotonic() - t0
+            if t >= trajectory.duration:
+                break
+            if seconds and (time.monotonic() - began) > seconds:
+                break
+            frame = morph(start_colors, target_colors, trajectory, t, seed=label)
+            bar = "".join(f"{_truecolor(frame[k])}\u2588{_RESET}" for k in keys)
+            sys.stdout.write(f"\r  {label}  {bar}")
+            sys.stdout.flush()
+            time.sleep(1 / 30.0)
+        final = "".join(f"{_truecolor(target_colors[k])}\u2588{_RESET}" for k in keys)
+        sys.stdout.write(f"\r  {label}  {final}\n")
+        sys.stdout.flush()
+    print()
     return 0
 
 
@@ -167,7 +309,7 @@ def run_doctor() -> int:
     truecolor = colorterm in ("truecolor", "24bit")
     sessions = snapshot()
 
-    print("\n  chromatophore doctor\n")
+    print("\n  cuttlefish doctor\n")
     print(f"    TERM                {term}")
     print(f"    COLORTERM           {colorterm}")
     print(f"    truecolor           {'yes' if truecolor else 'no (256-colour fallback)'}")
