@@ -2,7 +2,11 @@
 
 Ambient session identity for [Hermes](https://github.com/NousResearch/hermes-agent), modelled on cuttlefish skin.
 
-Every chat session gets its own colour, its own near-black mantle, and its own pronounceable name, held for the life of the session. When a session needs you, an acute signal **blanches** across the terminal — fast and direct, the way the animal does it — and is **released** again afterwards, the identity recovering underneath.
+Every chat session gets its own colour, its own near-black mantle, and its own pronounceable name, held for the life of the session. When a session needs you, an acute signal **blanches** across the whole terminal — fast and direct, the way the animal does it — and is **released** again afterwards, the identity recovering underneath.
+
+![cuttlefish-theme demo](docs/demo.gif)
+
+*Three sessions, each with its own skin. A fault arrives and blanches the third one; when it clears, the identity comes back exactly. Every frame in that GIF is rendered from the real skin engine — nothing is mocked up.*
 
 ```
 hermes cuttlefish watch      every session at once
@@ -99,6 +103,16 @@ The distribution matters as much as the colours: **~89% of cells sit near the gr
 Set per session, and near-black: `L 0.155` with just enough chroma (`C 0.018-0.026`) to be *this* session's black rather than a neutral one. Two terminals side by side are visibly different; neither looks like a coloured window.
 
 Turn it off with `tint_background: false` if you have a strong terminal theme of your own.
+
+## What it looks like
+
+Every session gets a chromatophore field — a real pixel grid, two pixels per character cell, composited as pigment over structural colour:
+
+![per-session skin fields](docs/skin-fields.png)
+
+The transition curves, as live colour bars. Blanch is abrupt and synchronous; recovery decelerates and staggers its components:
+
+![transition curves](docs/transitions.png)
 
 ## Install
 
