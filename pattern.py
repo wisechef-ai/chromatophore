@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .color.identity import IdentityColor
-from .color.oklab import OKLCh, oklch_to_hex
+from .color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
 from .session import Signal
 
 __all__ = ["Palette", "render", "ACUTE_AMBER", "ACUTE_FAULT"]
@@ -75,44 +75,31 @@ class Palette:
     # provenance, for honest reporting in `watch` and diagnostics
     meta: dict[str, Any] = field(default_factory=dict)
 
-    def skin_colors(self, *, tint_background: bool = True) -> dict[str, str]:
-        """Map onto Hermes skin keys.
+    def skin_colors(self, *, tint_background: bool = True, vivid: float = 1.0,
+                    calm_text: bool = True) -> dict[str, str]:
+        """Map onto EVERY skin key the engine actually reads.
 
-        The background IS set (Adam, 2026-09-09: "the session background should be
-        like the cuttlefish — black, and a lot of pixels"). It carries the identity
-        hue at very low chroma, so the ground is unmistakably near-black while still
-        being *this* session's black. Sepia officinalis' mantle is not neutral grey;
-        it is a warm ink that takes the cast of whatever the animal is wearing.
+        v2 set 8 keys and covered ~11 of 44 style classes, because the key list
+        came from the themes documentation rather than from `skin_engine.py`:
+        9 of those keys do not exist in this engine and were silently ignored.
+        The expansion now lives in `palette.build_palette()`, which is built from
+        a probe of the engine and audited by `palette.audit_palette()`.
 
-        `background` is a flat colour by construction — the skin schema has no
-        texture channel — so the "a lot of pixels" half of that requirement is
-        rendered by `field.py` into the banner and the watch board, where every cell
-        is genuinely ours. This method is the flat ground those pixels sit on, and
-        the two are derived from the same identity so they agree.
-
-        `tint_background=False` restores the v1 behaviour (chrome only) for users on
-        a light terminal or a strong terminal theme of their own.
+        The acute layer is passed as the accent source rather than replacing the
+        palette, so a blanching session still carries its own identity in the
+        ground, the borders and the text — the signal covers the skin, it does
+        not erase it.
         """
-        sheen = self.acute_hex or self.sheen_hex
-        colors = {
-            "ui_accent": sheen,
-            "banner_accent": sheen,
-            "ui_border": self.sheen_dim_hex,
-            "banner_border": self.sheen_dim_hex,
-            "input_rule": sheen,
-            "prompt": sheen,
-            "ui_tool": self.ink_hex,
-            "banner_title": self.sheen_hex,
-        }
-        if tint_background:
-            colors["background"] = self.ground_hex
-            # Surfaces that paint their OWN background must follow the ground, or
-            # they float as light rectangles on a dark mantle. These are the keys
-            # skin_engine templates with an explicit `bg:`.
-            colors["status_bar_bg"] = self.ground_hex
-            colors["completion_menu_bg"] = self.ground_hex
-            colors["voice_status_bg"] = self.ground_hex
-        return colors
+        from .palette import build_palette
+
+        acute = hex_to_oklch(self.acute_hex) if self.acute_hex else None
+        return build_palette(
+            hex_to_oklch(self.identity_hex),
+            acute=acute,
+            vivid=vivid,
+            tint_background=tint_background,
+            calm_text=calm_text,
+        )
 
 
 def _sheen(identity: OKLCh) -> OKLCh:
