@@ -185,9 +185,13 @@ def write_skin(
             # banner.py's two-column layout, so the session's chromatophore
             # pattern is on screen every time the banner draws — session start
             # AND /clear — rather than once into a transcript that scrolls away.
+            # acute_hex carries the session's STATE into the pigment: on a
+            # fault the whole field runs hot, which is what makes the mantle a
+            # state display rather than a static logo.
             hero = mantle_rows(palette.session_id, palette.identity_hex,
                                palette.sheen_hex,
-                               colors.get("background", "#0B0B0D"))
+                               colors.get("background", "#0B0B0D"),
+                               acute_hex=palette.acute_hex)
         except Exception:  # pragma: no cover - art is cosmetic, never fatal
             logo = hero = ""
 
