@@ -177,13 +177,17 @@ def write_skin(
     logo = hero = ""
     if with_banner:
         try:
-            from .banner import banner_hero as _hero
             from .banner import banner_logo as _logo
+            from .mantle import mantle_rows
 
-            seed = abs(hash(palette.session_id)) & 0xFFFFFFFF
             logo = _logo(palette.identity_hex)
-            hero = _hero(palette.identity_hex, palette.sheen_hex,
-                         colors.get("background", "#0B0B0D"), seed=seed)
+            # The mantle IS the hero. It drops into the caduceus' slot in
+            # banner.py's two-column layout, so the session's chromatophore
+            # pattern is on screen every time the banner draws — session start
+            # AND /clear — rather than once into a transcript that scrolls away.
+            hero = mantle_rows(palette.session_id, palette.identity_hex,
+                               palette.sheen_hex,
+                               colors.get("background", "#0B0B0D"))
         except Exception:  # pragma: no cover - art is cosmetic, never fatal
             logo = hero = ""
 

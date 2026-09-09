@@ -239,15 +239,20 @@ def test_background_tint_can_be_switched_off():
     assert "background" not in recorder.durable_writes[0][1]
 
 
-def test_background_tint_is_on_by_default_and_is_a_dark_session_colour():
-    """The background is dark enough to read on, and is THIS session's colour.
+def test_background_is_a_neutral_near_black():
+    """The ground gets OUT OF THE WAY; identity lives in the mantle.
 
-    The lightness ceiling was 0.25 when the ground was near-black. It is 0.26 now
-    (Adam, 2026-09-09: "the background has to take-over the work of
-    differentiation between sessions too") because chroma saturates at these
-    lightnesses and only L keeps buying separation. The contract that matters is
-    not a magic number but the pair below: dark enough for light text, coloured
-    enough to be an identity.
+    This assertion has now been rewritten twice, and the history is the point.
+    First it pinned a near-black tinted ground; then a brighter, more colourful
+    one when the background was asked to differentiate sessions; now a NEUTRAL
+    near-black (Adam: "can we have it black or gray and pixels like
+    cuttlefish?").
+
+    The lesson is that a flat background is the wrong channel for identity: one
+    hex has three numbers and two are spent on "dark enough to read on" and "not
+    pure black". Six sessions could only reach 0.0148 OKLab apart that way. A
+    30x30 mantle has 900 cells, so identity moved there (test_mantle.py) and this
+    test now pins the ground to being unobtrusive.
     """
     from cuttlefish_theme.color.oklab import hex_to_oklch
     from cuttlefish_theme.color.terminal import contrast_ratio
@@ -257,38 +262,32 @@ def test_background_tint_is_on_by_default_and_is_a_dark_session_colour():
     animator.tick_once()
     ground = recorder.durable_writes[0][1]["background"]
     oklch = hex_to_oklch(ground)
-    assert oklch.L < 0.34, "background must stay a dark terminal"
-    assert oklch.C > 0.03, "background must carry the session hue, not be grey"
-    assert ground.lower() != "#000000"
-    # Body text must remain comfortable on it, well past WCAG AA.
-    assert contrast_ratio("#E8E6EA", ground) > 9.0
+    assert oklch.L < 0.22, "the ground must read as black"
+    assert oklch.C < 0.015, "the ground must read as NEUTRAL, not tinted"
+    assert ground.lower() != "#000000", "pure black is dead; keep a trace of cast"
+    assert contrast_ratio("#E8E6EA", ground) > 12.0
 
 
-def test_two_sessions_get_visibly_different_backgrounds():
-    """The background is now a PRIMARY identity channel, not a tint.
+def test_identity_is_carried_by_the_mantle_not_the_background():
+    """Where differentiation actually comes from, pinned as a comparison.
 
-    The banner scrolls out of the transcript; the window does not. Six sessions
-    used to land 0.0148 OKLab apart — ten times below the identity separation
-    floor, i.e. six blacks. This pins the improvement so a future palette tweak
-    cannot quietly undo it.
+    Backgrounds are DELIBERATELY near-identical now. The mantle must not be —
+    otherwise nothing tells two sessions apart and we have regressed to the
+    original complaint.
     """
     from cuttlefish_theme.color.identity import allocate_many
     from cuttlefish_theme.color.oklab import delta_e_ok, hex_to_oklch
+    from cuttlefish_theme.mantle import mantle_rows
     from cuttlefish_theme.palette import build_palette
 
-    grounds = [hex_to_oklch(build_palette(i.oklch)["background"])
-               for i in allocate_many([f"s{n}" for n in range(6)])]
-    worst = min(delta_e_ok(a, b)
-                for i, a in enumerate(grounds) for b in grounds[i + 1:])
-    assert worst > 0.025, f"backgrounds are indistinguishable: {worst:.4f}"
+    ids = allocate_many([f"s{n}" for n in range(4)])
+    grounds = [hex_to_oklch(build_palette(i.oklch)["background"]) for i in ids]
+    spread = max(delta_e_ok(a, b)
+                 for x, a in enumerate(grounds) for b in grounds[x + 1:])
+    assert spread < 0.02, f"grounds should be uniform, got {spread:.4f}"
 
-
-def test_two_sessions_get_distinguishable_grounds():
-    """The point of a per-session ground: two terminals side by side must not be
-    the same black."""
-    a = render(allocate("alpha", []), Signal.RESTING)
-    b = render(allocate("beta", [a.identity_hex]), Signal.RESTING)
-    assert a.ground_hex != b.ground_hex
+    mantles = {mantle_rows(i.session_id, i.hex, i.hex, "#111111") for i in ids}
+    assert len(mantles) == len(ids), "every session needs its own pattern"
 
 
 def test_watch_interval_must_be_positive():
