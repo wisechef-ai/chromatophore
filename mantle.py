@@ -49,6 +49,8 @@ which is what makes it a state channel and not decoration.
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 from .color.oklab import OKLCh, hex_to_oklch
 
 __all__ = ["mantle_rows", "pigment_set", "MANTLE_WIDTH", "MANTLE_HEIGHT"]
@@ -159,6 +161,34 @@ def pigment_set(
     return tuple(classes)
 
 
+def _oklch_key(c: OKLCh) -> tuple:
+    return (round(c.L, 4), round(c.C, 4), round(c.h, 2))
+
+
+@lru_cache(maxsize=8192)
+def _composite_cached(expansion: float, pig: tuple, sheen: tuple,
+                      base: tuple) -> str:
+    from .field import _composite
+
+    return _composite(expansion, OKLCh(*pig), OKLCh(*sheen), OKLCh(*base))
+
+
+def _cached_composite(expansion: float, pigment: OKLCh, sheen: OKLCh,
+                      base: OKLCh) -> str:
+    """`field._composite` memoised on quantised inputs.
+
+    The compositor runs 900 times per field and does several OKLab<->sRGB
+    conversions and a gamut check each time — measured at ~250ms for one mantle,
+    which is far too much to add to a session start. But the inputs are highly
+    degenerate: expansion quantised to 1e-3 and only a handful of distinct
+    pigment/sheen/base colours, so almost every call is a repeat. Quantising to
+    three decimals is invisible (it is well under one 8-bit step) and turns the
+    render into a lookup.
+    """
+    return _composite_cached(expansion, _oklch_key(pigment), _oklch_key(sheen),
+                             _oklch_key(base))
+
+
 def mantle_rows(
     session_id: str,
     identity_hex: str,
@@ -176,10 +206,23 @@ def mantle_rows(
     escape sequences would be escaped and printed literally there.
     `markup=False` gives ANSI for direct terminal writes.
     """
-    from .field import _composite, _smooth_noise, mottle
+    from .field import _smooth_noise
+    from .nebula import nebula
 
     seed = abs(hash(session_id)) & 0xFFFFFFFF
-    field = mottle(width, height, seed=seed)
+    # Nebula structure rather than flat mottle: a core envelope, filaments, a
+    # dust lane and stars. Both reviewers (gpt-5.6-sol, glm-5.3) independently
+    # named the same defect in the flat version — value noise is STATIONARY, so
+    # the field read as texture rather than as an object. See nebula.py.
+    field = nebula(width, height, seed=seed)
+    # Quantise the field to 32 levels AT THE SOURCE. The composite cache keys on
+    # expansion, and 900 near-unique floats meant it barely hit (measured
+    # ~200ms cold per session). 5 bits is finer than 8-bit sRGB can distinguish
+    # at these lightnesses, so this is visually free and turns the composite
+    # into a table lookup.
+    for yy in range(height):
+        for xx in range(width):
+            field.set(xx, yy, round(field.get(xx, yy) * 32.0) / 32.0)
     pigments = pigment_set(identity_hex, acute_hex)
     sheen = hex_to_oklch(sheen_hex)
     base = hex_to_oklch(ground_hex)
@@ -210,10 +253,11 @@ def mantle_rows(
         return pigments[-1]
 
     def cell(x: int, y: int) -> str:
-        top = _composite(field.get(x, y), pigment_at(x, y), sheen, base)
-        if y + 1 < field.height:
-            bottom = _composite(field.get(x, y + 1), pigment_at(x, y + 1),
+        top = _cached_composite(round(field.get(x, y), 3), pigment_at(x, y),
                                 sheen, base)
+        if y + 1 < field.height:
+            bottom = _cached_composite(round(field.get(x, y + 1), 3),
+                                       pigment_at(x, y + 1), sheen, base)
         else:
             bottom = ground_hex
         if markup:

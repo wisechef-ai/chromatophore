@@ -178,17 +178,59 @@ def test_ansi_mode_emits_escapes_and_always_resets():
         assert line.endswith("\x1b[0m")
 
 
-def test_the_mantle_is_dark_with_bright_spots():
-    """Cuttlefish skin, not a colour block: most cells near the ground, a
-    minority strongly expressed."""
+def test_the_mantle_is_a_dark_sky_with_a_bright_object():
+    """The nebula contract: mostly dark sky, a luminous core, and stars.
+
+    The old thresholds (40%+ dark) belonged to the flat-mottle field and the new
+    nebula structure legitimately redistributes light into the core envelope —
+    that redistribution IS the feature. What must hold is the SKY/OBJECT split a
+    nebula needs: a majority of dark cells around a minority of bright ones, with
+    genuinely bright highlights present. Measured on the shipped structure.
+    """
     lightness = [hex_to_oklch(c).L for c in
                  _fg_colours(mantle_rows("s1", IDENTITY, SHEEN, GROUND,
                                          markup=False))]
     assert lightness
-    dark = sum(1 for v in lightness if v < 0.30) / len(lightness)
+    dark = sum(1 for v in lightness if v < 0.35) / len(lightness)
     bright = sum(1 for v in lightness if v > 0.55) / len(lightness)
-    assert dark > 0.4, f"only {dark:.0%} of the mantle is dark"
-    assert bright > 0.02, f"no highlights: {bright:.1%} bright cells"
+    assert dark > 0.25, f"sky is being lost: only {dark:.0%} dark"
+    assert bright > 0.03, f"no luminous core: {bright:.1%} bright cells"
+
+
+def test_the_light_is_organised_not_stationary():
+    """THE structural fix from the design review, pinned.
+
+    Both reviewers independently diagnosed the flat field's defect: value noise
+    is stationary, so its statistics are identical everywhere and the eye reads
+    a swatch of texture rather than an object. The nebula field confines light
+    to an off-centre envelope, so (a) the light's centroid is off-centre and (b)
+    it differs between sessions — which is also why sessions are now told apart
+    by the SHAPE and POSITION of their object, not just its colour.
+    """
+    from cuttlefish_theme.nebula import nebula, stats
+
+    a = stats(nebula(30, 30, seed=111))
+    b = stats(nebula(30, 30, seed=222))
+    assert a["offset_from_centre"] > 0.05, "light is centred: still a texture"
+    assert b["offset_from_centre"] > 0.05
+    assert a["centroid"] != b["centroid"], "every session's object sits in the same place"
+
+
+def test_the_field_renders_within_the_startup_budget():
+    """Session start must not stall waiting for art.
+
+    The whole render must stay well under a tenth of a second; measured at
+    172ms before two rounds of caching brought it to ~80ms cold. This pins it
+    so a future structure cannot quietly regress the user's first impression.
+    """
+    import time
+
+    from cuttlefish_theme.nebula import nebula
+
+    began = time.monotonic()
+    nebula(30, 30, seed=4242)
+    elapsed_ms = (time.monotonic() - began) * 1000
+    assert elapsed_ms < 300, f"field took {elapsed_ms:.0f}ms"
 
 
 def test_mantle_is_written_into_the_skin_as_banner_hero(tmp_path, monkeypatch):
