@@ -206,26 +206,46 @@ def mantle_rows(
     escape sequences would be escaped and printed literally there.
     `markup=False` gives ANSI for direct terminal writes.
     """
-    from .field import _smooth_noise
-    from .nebula import nebula
+    from .field import _smooth_noise, mottle
 
     seed = abs(hash(session_id)) & 0xFFFFFFFF
-    # Nebula structure rather than flat mottle: a core envelope, filaments, a
-    # dust lane and stars. Both reviewers (gpt-5.6-sol, glm-5.3) independently
-    # named the same defect in the flat version — value noise is STATIONARY, so
-    # the field read as texture rather than as an object. See nebula.py.
-    field = nebula(width, height, seed=seed)
-    # Quantise the field to 32 levels AT THE SOURCE. The composite cache keys on
-    # expansion, and 900 near-unique floats meant it barely hit (measured
-    # ~200ms cold per session). 5 bits is finer than 8-bit sRGB can distinguish
-    # at these lightnesses, so this is visually free and turns the composite
-    # into a table lookup.
+    # THE FIELD IS CUTTLEFISH SKIN, not a nebula. Adam, 2026-09-09: "dont focus
+    # much about the nebulas the pattern should be still the cuttlefish ... the
+    # whole project is about cuttlefishes". The nebula version (off-centre core
+    # envelope, stars, absorption lanes) was an over-literal reading of his
+    # metaphor for the COLOURS, and its structure is astronomy: a single object
+    # in a dark sky. A cuttlefish mottle is the opposite — light and dark
+    # patches spread across the WHOLE skin at two scales (Hanlon & Messenger's
+    # mottle class: coarse patches with fine graining inside them), because the
+    # animal is matching a background everywhere at once, not spotlighting one
+    # region. mottle() already implements exactly that: two octaves of value
+    # noise, a density cut so ~11% of cells carry strong pigment, eased spot
+    # distribution and per-cell grain.
+    #
+    # What the nebula detour bought, and what is KEPT: the multi-pigment classes
+    # below (the actual "multi colour vibrant" request), the state recolouring,
+    # and the performance work — the 32-level quantisation stays because it is
+    # what keeps the render at ~80ms instead of ~200.
+    field = mottle(width, height, seed=seed)
     for yy in range(height):
         for xx in range(width):
             field.set(xx, yy, round(field.get(xx, yy) * 32.0) / 32.0)
     pigments = pigment_set(identity_hex, acute_hex)
     sheen = hex_to_oklch(sheen_hex)
     base = hex_to_oklch(ground_hex)
+    if acute_hex:
+        # THE SHEEN MUST FOLLOW THE SIGNAL TOO. The iridophore reveal layer sits
+        # under every cell and dominates the ~89% that are retracted — measured:
+        # a FAULT mantle had 330 of 450 cells at the resting sheen's hue while
+        # the pigment classes were all red. The fault was being announced by
+        # 11% of the field and denied by the rest. In the animal a blanch
+        # contracts the chromatophores across the WHOLE skin; here, the reveal
+        # layer takes the acute cast so the entire field answers.
+        sheen = OKLCh(
+            (sheen.L + hex_to_oklch(acute_hex).L) / 2 + 0.06,
+            sheen.C * 0.35 + hex_to_oklch(acute_hex).C * 0.25,
+            hex_to_oklch(acute_hex).h,
+        )
 
     # Coarse class noise: patches of same-class cells, not per-cell confetti.
     # scale 7 against the expansion field's 3 keeps class regions clearly larger

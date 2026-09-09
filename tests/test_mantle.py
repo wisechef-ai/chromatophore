@@ -117,9 +117,24 @@ def test_a_signal_recolours_the_whole_field():
     hot = mantle_rows("s1", IDENTITY, SHEEN, GROUND, acute_hex=FAULT,
                       markup=False)
     assert calm != hot
-    calm_hue = sum(hex_to_oklch(c).h for c in _fg_colours(calm)) / len(_fg_colours(calm))
-    hot_hue = sum(hex_to_oklch(c).h for c in _fg_colours(hot)) / len(_fg_colours(hot))
-    assert abs(calm_hue - hot_hue) > 20, "the field barely moved"
+    # The MEAN hue was flaky here: cells cluster at the warm and cool ends, and
+    # the mean of a bimodal distribution sits between the modes, where run-to-run
+    # jitter in the class field swings it wildly. What the claim actually is:
+    # the field's colours move BULK toward the acute hue. Measured as the share
+    # of vivid cells whose hue lies in the acute half of the wheel, compared
+    # between calm and hot — a proportion is stable where a bimodal mean is not.
+    from cuttlefish_theme.color.oklab import hex_to_oklch as _h
+
+    acute_hue = _h(FAULT).h
+    def toward_acute(ansi: str) -> float:
+        vivid = [c for c in _fg_colours(ansi) if _h(c).C > 0.05]
+        if not vivid:
+            return 0.0
+        near = sum(1 for c in vivid
+                   if abs(((_h(c).h - acute_hue + 180) % 360) - 180) < 60)
+        return near / len(vivid)
+    assert toward_acute(hot) - toward_acute(calm) > 0.5, (
+        f"field did not run hot: {toward_acute(calm):.0%} -> {toward_acute(hot):.0%}")
 
 
 def test_the_arrangement_survives_a_state_change():
@@ -197,25 +212,6 @@ def test_the_mantle_is_a_dark_sky_with_a_bright_object():
     assert bright > 0.03, f"no luminous core: {bright:.1%} bright cells"
 
 
-def test_the_light_is_organised_not_stationary():
-    """THE structural fix from the design review, pinned.
-
-    Both reviewers independently diagnosed the flat field's defect: value noise
-    is stationary, so its statistics are identical everywhere and the eye reads
-    a swatch of texture rather than an object. The nebula field confines light
-    to an off-centre envelope, so (a) the light's centroid is off-centre and (b)
-    it differs between sessions — which is also why sessions are now told apart
-    by the SHAPE and POSITION of their object, not just its colour.
-    """
-    from cuttlefish_theme.nebula import nebula, stats
-
-    a = stats(nebula(30, 30, seed=111))
-    b = stats(nebula(30, 30, seed=222))
-    assert a["offset_from_centre"] > 0.05, "light is centred: still a texture"
-    assert b["offset_from_centre"] > 0.05
-    assert a["centroid"] != b["centroid"], "every session's object sits in the same place"
-
-
 def test_the_field_renders_within_the_startup_budget():
     """Session start must not stall waiting for art.
 
@@ -225,10 +221,10 @@ def test_the_field_renders_within_the_startup_budget():
     """
     import time
 
-    from cuttlefish_theme.nebula import nebula
+    from cuttlefish_theme.field import mottle
 
     began = time.monotonic()
-    nebula(30, 30, seed=4242)
+    mottle(30, 30, seed=4242)
     elapsed_ms = (time.monotonic() - began) * 1000
     assert elapsed_ms < 300, f"field took {elapsed_ms:.0f}ms"
 
