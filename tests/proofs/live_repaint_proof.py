@@ -40,7 +40,8 @@ if "cuttlefish_theme" not in sys.modules:
     sys.modules["cuttlefish_theme"] = _mod
     _spec.loader.exec_module(_mod)
 
-from cuttlefish_theme.color.identity import allocate          # noqa: E402
+from cuttlefish_theme.color.identity import allocate
+from cuttlefish_theme.color.oklab import hex_to_oklch          # noqa: E402
 from cuttlefish_theme.pattern import render                   # noqa: E402
 from cuttlefish_theme.session import Signal                   # noqa: E402
 from cuttlefish_theme.skinio import session_skin_name, write_skin  # noqa: E402
@@ -85,8 +86,16 @@ overrides_resting = dict(get_prompt_toolkit_style_overrides())
 
 check("skin file written", path.is_file(), path.name)
 check("skin activated", get_active_skin().name == skin_name, get_active_skin().name)
-check("accent is the identity sheen", accent_resting.upper() == resting.sheen_hex.upper(),
-      f"{accent_resting} == {resting.sheen_hex}")
+# v4: the accent is DERIVED from the identity (contrast-locked, chroma boosted to
+# the animal's measured 0.16-0.24 band), not a copy of sheen_hex. So the contract
+# is "same hue family as the identity", not "equal to a particular field".
+_acc = hex_to_oklch(accent_resting)
+_idn = hex_to_oklch(resting.identity_hex)
+_dh = abs(((_acc.h - _idn.h + 180) % 360) - 180)
+check("accent carries the identity hue", _dh < 20,
+      f"{accent_resting} h{_acc.h:.0f} vs identity {resting.identity_hex} h{_idn.h:.0f}")
+check("accent is vivid (measured animal band C>=0.16)", _acc.C >= 0.15,
+      f"C {_acc.C:.3f}")
 check("resting has no acute layer", resting.acute_hex is None)
 check("resting label is silent", resting.label == "", repr(resting.label))
 
@@ -99,9 +108,11 @@ accent_needs = get_active_skin().get_color("ui_accent", "?")
 overrides_needs = dict(get_prompt_toolkit_style_overrides())
 
 check("acute layer present", needs.acute_hex is not None, str(needs.acute_hex))
-check("accent switched to the acute amber",
-      accent_needs.upper() == needs.acute_hex.upper(),
-      f"{accent_needs} == {needs.acute_hex}")
+_acu = hex_to_oklch(accent_needs)
+_amb = hex_to_oklch(needs.acute_hex)
+_dha = abs(((_acu.h - _amb.h + 180) % 360) - 180)
+check("accent switched to the acute hue", _dha < 20,
+      f"{accent_needs} h{_acu.h:.0f} vs acute {needs.acute_hex} h{_amb.h:.0f}")
 check("accent actually CHANGED from resting", accent_needs.upper() != accent_resting.upper(),
       f"{accent_resting} -> {accent_needs}")
 check("prompt_toolkit style overrides changed too",

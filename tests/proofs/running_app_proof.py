@@ -172,9 +172,19 @@ with create_pipe_input() as inp:
     check("THE APP'S OWN STYLE CHANGED on the acute signal",
           prompt_needs != prompt_resting,
           f"{prompt_resting} -> {prompt_needs}")
-    check("acute colour is the amber we wrote",
-          prompt_needs and prompt_needs.upper() == needs.acute_hex.lstrip("#").upper(),
-          f"{prompt_needs} vs {needs.acute_hex}")
+    # v4: the prompt colour is DERIVED from the acute hue (contrast-locked and
+    # chroma-boosted into the animal's measured 0.16-0.24 band), not a copy of
+    # `acute_hex`. So assert the behaviour that matters — the prompt moved into
+    # the acute hue family — rather than byte-equality with an intermediate.
+    from cuttlefish_theme.color.oklab import hex_to_oklch as _h2o
+
+    _pn = _h2o("#" + prompt_needs) if prompt_needs else None
+    _ac = _h2o(needs.acute_hex)
+    _d = abs(((_pn.h - _ac.h + 180) % 360) - 180) if _pn else 999
+    check("acute colour carries the amber hue",
+          _pn is not None and _d < 25,
+          f"#{prompt_needs} h{_pn.h:.0f} vs {needs.acute_hex} h{_ac.h:.0f}" if _pn
+          else "no prompt colour")
 
     # --- release ---
     released = render(ident, Signal.RESTING)

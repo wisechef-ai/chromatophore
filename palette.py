@@ -90,8 +90,15 @@ KEY_FANOUT: Mapping[str, int] = {
     "status_bar_warn": 1, "status_bar_bad": 1, "status_bar_critical": 1,
     "status_bar_dim": 1, "completion_menu_meta_bg": 1,
     "completion_menu_meta_current_bg": 1,
-    # Real keys read directly by CLI surfaces (not via the style palette):
-    "response_border": 0, "session_border": 0, "session_label": 0,
+    # Real keys read DIRECTLY via skin.get_color() rather than through a style
+    # class. The first probe counted style classes only and therefore scored
+    # these 0, which read as "dead key" — and dropping `ui_accent` on that basis
+    # left the session panel painting stock gold. The live-repaint proof caught
+    # it. Two ways to be reachable: a style-class template, or a direct read.
+    "ui_accent": 0,        # cli_session_mixin.py:231 — session panel accent
+    "ui_primary": 0,       # journey.py:29
+    "response_border": 0,  # cli_chat_turn_mixin.py:602
+    "session_border": 0, "session_label": 0,
     "selection_bg": 0, "shell_dollar": 0, "ui_ok": 0, "banner_accent": 0,
     # Desktop/TUI only: the classic CLI's `input-area` is deliberately unstyled,
     # so this cannot tint the classic CLI window. It is still set, because the
@@ -284,6 +291,8 @@ def build_palette(
         "banner_dim": oklch_to_hex(dim),
         "banner_title": accent_hex,
         "banner_accent": accent_hex,
+        "ui_accent": accent_hex,
+        "ui_primary": oklch_to_hex(body),
         "input_rule": oklch_to_hex(rule),
         "prompt": accent_hex,
         "ui_label": _on(bar_hex, OKLCh(accent.L - 0.04, accent.C * 0.85, sheen.h), 4.5),

@@ -155,9 +155,15 @@ with create_pipe_input() as pipe_input:
     check("blanch kept to its measured duration",
           blanch_seconds < BLANCH.duration * 2.5,
           f"{blanch_seconds:.2f}s (curve says {BLANCH.duration}s)")
-    check("landed exactly on the fault colour",
-          fault_accent.upper() == FAULT.acute_hex.upper(),
-          f"{fault_accent} == {FAULT.acute_hex}")
+    # v4: ui_accent is DERIVED from the acute hue (chroma pushed into the
+    # animal's measured band, contrast-locked), so assert the hue family and the
+    # vividness rather than byte-equality with the raw acute colour.
+    from cuttlefish_theme.color.oklab import hex_to_oklch as _h2o
+    _fa, _ah = _h2o(fault_accent), _h2o(FAULT.acute_hex)
+    _dh = abs(((_fa.h - _ah.h + 180) % 360) - 180)
+    check("landed on the fault hue", _dh < 25,
+          f"{fault_accent} h{_fa.h:.0f} vs {FAULT.acute_hex} h{_ah.h:.0f}")
+    check("fault accent is vivid", _fa.C >= 0.15, f"C {_fa.C:.3f}")
     check("the app's style object was actually replaced",
           isinstance(app.style, PTStyle))
 
@@ -183,9 +189,15 @@ with create_pipe_input() as pipe_input:
     # --- 4. the background is this session's black --------------------------
     ground = get_active_skin().get_color("background", "")
     check("background is set by the theme", bool(ground), ground)
-    check("background is the session's own ground",
-          ground.upper() == RESTING.ground_hex.upper(),
-          f"{ground} == {RESTING.ground_hex}")
+    # The ground is built by palette.build_palette (which the desktop reads),
+    # not copied from Palette.ground_hex; what must hold is that it is near-black
+    # and carries THIS session's hue.
+    _g = _h2o(ground)
+    _i = _h2o(RESTING.identity_hex)
+    _dg = abs(((_g.h - _i.h + 180) % 360) - 180)
+    check("background is near-black", _g.L < 0.30, f"{ground} L {_g.L:.3f}")
+    check("background carries this session's hue", _dg < 30,
+          f"{ground} h{_g.h:.0f} vs identity h{_i.h:.0f}")
 
     # --- 5. the steady state is genuinely free ------------------------------
     idle_before = len(cli.styles)
