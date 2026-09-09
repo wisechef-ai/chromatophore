@@ -72,13 +72,33 @@ MIN_IDENTITY_DISTANCE = 0.155
 # (0.1362 -> 0.1362), while widening these bands moved it 0.1362 -> 0.1655, i.e. from
 # below MIN_IDENTITY_DISTANCE to above it. The volume is the constraint; sampling it
 # harder does not create room that isn't there.
-_L_MIN, _L_MAX = 0.52, 0.86
-_C_MIN, _C_MAX = 0.085, 0.20
+#
+# CHROMA FLOOR RAISED 0.085 -> 0.135 (2026-09-09). Measured against four
+# photographs of a displaying Metasepia pfefferi (sample_photos.py): the animal's
+# accent pixels run C 0.21-0.24 and ~11% of it clears C 0.10. With a 0.085 floor
+# some sessions were allocated at C 0.111 and their whole skin — field included —
+# measured 0% vivid, so identity strength depended on the luck of the draw. The
+# floor is what makes EVERY session signal-grade.
+#
+# LIGHTNESS BAND 0.52-0.86 -> 0.48-0.82. sRGB cannot hold high chroma at high
+# lightness (measured at hue 300: L 0.55 allows C 0.293, L 0.80 only 0.118), so a
+# light identity was silently gamut-mapped back to pastel; the animal's own vivid
+# pixels sit at L 0.54-0.61 for exactly this reason. The band was swept rather
+# than guessed (12 combinations, 8 concurrent sessions): raising the chroma floor
+# alone cost separation (0.170 -> 0.147, one session crowded), but dropping the
+# lightness floor to 0.48 recovers it. Final: worst separation 0.183, min chroma
+# 0.130, zero crowded — better than the original on BOTH axes.
+_L_MIN, _L_MAX = 0.48, 0.82
+_C_MIN, _C_MAX = 0.135, 0.24
 
 # Hue ranges reserved for SEMANTIC state, which identity may never impersonate.
 # A session whose identity colour was amber would be permanently unreadable as
 # "this session needs you". Amber ~70-95 deg, fault red ~15-40 deg in OKLCh.
-_RESERVED: tuple[tuple[float, float], ...] = ((15.0, 42.0), (68.0, 98.0))
+#
+# Widened 2026-09-09 after an allocation landed at hue 13 — three degrees outside
+# the old red band and visually indistinguishable from the fault colour on a
+# status bar. Hue proximity is not linear in perception; leave real margin.
+_RESERVED: tuple[tuple[float, float], ...] = ((5.0, 48.0), (62.0, 102.0))
 
 # Golden angle: successive multiples land maximally far from all previous ones,
 # which gives a low-discrepancy hue sequence rather than hash clumping.
@@ -153,7 +173,14 @@ def _candidates(session_id: str, count: int) -> list[OKLCh]:
         cand = gamut_map(OKLCh(L, C, h))
         # Gamut mapping can crush chroma in the deep blues/violets; a washed-out
         # identity is a weak identity, so drop those rather than ship them.
-        if cand.C >= _C_MIN * 0.72 and in_srgb_gamut(cand):
+        #
+        # The tolerance used to be 0.72 * _C_MIN, i.e. a 28% escape hatch, and it
+        # was load-bearing in the wrong direction: it admitted exactly the pastel
+        # candidates the floor exists to reject, so some sessions shipped at
+        # C 0.111 and measured 0% vivid. Held at 0.95 now — a candidate that
+        # cannot survive gamut mapping is discarded, and there are 12x more where
+        # it came from.
+        if cand.C >= _C_MIN * 0.95 and in_srgb_gamut(cand):
             out.append(cand)
     return out
 

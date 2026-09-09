@@ -205,15 +205,20 @@ def build_palette(
     # shade of calm. The wash is partial (the identity hue still shows through
     # in the ground and the borders) because blanching COVERS identity, it never
     # destroys it — the animal recovers its exact prior pattern afterwards.
-    ground_h, ground_c = h, _clamp(identity.C * 0.12, 0.016, 0.026)
-    bar_h, bar_c = h, _clamp(identity.C * 0.16, 0.020, 0.045)
+    ground_h, ground_c = h, _clamp(identity.C * 0.16, 0.022, 0.034)
+    bar_h, bar_c = h, _clamp(identity.C * 0.22, 0.028, 0.055)
     if signalling:
         ground_h = _mix_hue(h, sheen.h, 0.55)
         ground_c = _clamp(ground_c * 1.8, 0.020, 0.045)
         bar_h = _mix_hue(h, sheen.h, 0.70)
         bar_c = _clamp(bar_c * 2.0, 0.030, 0.075)
 
-    ground = OKLCh(0.155, ground_c, ground_h)
+    # L 0.20: the photographs measure a ground of L 0.245-0.310, but that
+    # includes lit sand and the animal's mid-tones. The DARKEST third of the
+    # mantle is what a terminal background is analogous to, so we sit just under
+    # the measured floor - dark enough to read as black on any terminal, light
+    # enough that the identity hue is actually visible in it.
+    ground = OKLCh(0.200, ground_c, ground_h)
     ground_hex = oklch_to_hex(ground)
 
     # Bars sit slightly above the ground so they read as a surface ON the skin
@@ -233,10 +238,20 @@ def build_palette(
     dim = OKLCh(0.600, min(0.035, text_c * 1.6), h)
 
     # --- glanced-at roles: this is where the vivid lives --------------------
-    accent = OKLCh(_clamp(sheen.L + 0.16, 0.74, 0.86),
-                   _clamp(sheen.C * (0.95 + 0.45 * v), 0.10, 0.21), sheen.h)
+    # Chroma ceiling 0.24: MEASURED from four photographs of Metasepia pfefferi
+    # in full display (sample_photos.py). The most saturated real pixels are
+    # #C70F5F, #E6187B, #D31B7C, #E51020 — electric magenta and scarlet.
+    #
+    # THE LIGHTNESS IS THE WHOLE TRICK. Those pixels sit at L 0.538-0.605, NOT
+    # at 0.78 where v3 put its accents. sRGB simply cannot hold high chroma at
+    # high lightness — measured at hue 300: L 0.55 allows C 0.293, L 0.80 allows
+    # only 0.118. So v3's "brighter = more vivid" instinct was backwards: raising
+    # L forced the gamut mapper to strip the chroma back out, and the accent came
+    # back pale. Sitting at the animal's own lightness is what makes it electric.
+    accent = OKLCh(_clamp(sheen.L, 0.56, 0.68),
+                   _clamp(sheen.C * (1.35 + 0.65 * v), 0.16, 0.24), sheen.h)
     rule = OKLCh(_clamp(identity.L - 0.02, 0.60, 0.72),
-                 _clamp(identity.C * (0.70 + 0.35 * v), 0.07, 0.15), h)
+                 _clamp(identity.C * (0.90 + 0.45 * v), 0.10, 0.19), h)
     border = OKLCh(_clamp(identity.L - 0.16, 0.44, 0.60),
                    _clamp(identity.C * 0.55, 0.05, 0.11), h)
 

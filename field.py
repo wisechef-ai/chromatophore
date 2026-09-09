@@ -66,6 +66,14 @@ __all__ = [
 WAVE_HUNTING_HZ = 1.0      # S. officinalis passing wave, hunting
 WAVE_AGONISTIC_HZ = 0.38   # S. apama agonistic display, 7s per band
 
+# Expansion above which a cell starts exposing leucophore white rather than more
+# pigment. CALIBRATED, not guessed: at the default density only ~2% of cells
+# exceed 0.72, so an onset there produced a 0.5% bright fraction against the
+# animal's measured 16.4%. 0.52 puts the onset near the mottle's p90 and lands
+# the bright fraction in the right band. Check with sample_photos.py after any
+# change to the mottle distribution — the two are coupled.
+_LEUCO_ONSET = 0.52
+
 
 @dataclass
 class Field:
@@ -148,8 +156,8 @@ def _smooth_noise(x: float, y: float, seed: int) -> float:
 
 
 def mottle(width: int, height: int, *, seed: int, scale: float = 3.0,
-           contrast: float = 1.0, density: float = 0.34,
-           grain: float = 0.55) -> Field:
+           contrast: float = 1.0, density: float = 0.46,
+           grain: float = 0.40, peak: float = 1.0) -> Field:
     """A static resting texture: the animal's own mottled base pattern.
 
     THE SHAPE OF THE DISTRIBUTION IS THE POINT. A field of smoothly-varying
@@ -197,8 +205,15 @@ def mottle(width: int, height: int, *, seed: int, scale: float = 3.0,
                 # mid-expansion, which is exactly the washed-out midtone we are
                 # avoiding. Squaring pushes the bulk down and lets a few cells
                 # reach full pigment, which is the distribution real skin shows.
+                # MEASURED against the real animal (sample_photos.py): a
+                # flamboyant cuttlefish in display has ~16% of pixels at L>0.65
+                # and ~11% above chroma 0.10. The previous curve produced 0% and
+                # 2.4% — every spot stalled in the midtone, which is why the
+                # field looked washed out next to the photographs. Easing OUT
+                # (exponent < 1) pushes the spots that clear the cut TOWARD full
+                # pigment instead of bunching them just above the floor.
                 u = (v - cut) / (1.0 - cut) if cut < 1 else 1.0
-                v = 0.05 + (u ** 1.25) * 0.95
+                v = 0.04 + (u ** 0.62) * 0.96 * peak
             # Gamma toward the extremes: individual cells read as on or off.
             if contrast != 1.0:
                 v = v ** (1.0 / max(0.05, contrast)) if v > 0 else 0.0
@@ -280,18 +295,28 @@ def passing_cloud(
 def _composite(expansion: float, pigment: OKLCh, sheen: OKLCh, base: OKLCh) -> str:
     """Pigment over structural colour, as the skin is actually stacked.
 
-    At expansion 0 the pigment sac is retracted and you see the reflective layers;
-    at 1 it covers them. Between, we interpolate in OKLCh, so the midpoint is a
-    real intermediate colour rather than the grey a naive RGB blend produces.
+    THREE layers, because the animal has three (Froesch & Messenger 1978, Fig. 15):
 
-    The reflective floor brightens only SLIGHTLY as expansion drops — the iridophore
-    becoming visible. The lift is DELIBERATELY tiny (0.045 of the gap to the sheen).
-    Two earlier versions lifted it hard, at 0.55 and then 0.16, and both washed the
-    field to a flat midtone haze: because the sheen is bright and the ground is
-    near-black, that gap is large, so even a small-looking fraction of it raises
-    EVERY retracted cell well above the ground — and ~89% of cells are retracted.
-    Chroma moves further than lightness because that is what structural colour
-    actually does: it shifts the hue without making the skin pale.
+        chromatophore   pigment sac, expansion 0..1   — the identity colour
+        iridophore      structural interference       — the cool sheen beneath
+        leucophore      broadband white reflector     — the bright highlights
+
+    v3 modelled only the first two, and the field measured 0% of pixels above
+    L 0.65 where a real cuttlefish in display has 16.4% (sample_photos.py). The
+    reason is structural: the pigment itself sits at L~0.62, so NOTHING composited
+    from it can be brighter than the pigment. Real skin gets its highlights from
+    the leucophores — the white patches on Sepia's fin spots and Metasepia's arm
+    tips — which are not pigment at all.
+
+    So the top of the expansion range is re-read as leucophore exposure rather
+    than more pigment: past `_LEUCO_ONSET` the cell brightens toward a broadband
+    white tinted by the identity hue. That is what puts real highlights in the
+    field, and it is why the animal reads as vivid rather than merely coloured.
+
+    The reflective floor brightens only SLIGHTLY as expansion drops (0.045 of the
+    gap to the sheen). Two earlier versions lifted it at 0.55 and 0.16 and both
+    washed the field to a flat midtone haze: ~89% of cells are retracted, so even
+    a small-looking fraction raises everything at once.
     """
     e = _clamp(expansion)
     reveal = OKLCh(
@@ -299,12 +324,29 @@ def _composite(expansion: float, pigment: OKLCh, sheen: OKLCh, base: OKLCh) -> s
         base.C + (sheen.C - base.C) * (1.0 - e) * 0.30,
         sheen.h,
     )
+    # Pigment saturates AT the leucophore onset, not at expansion 1.0. Otherwise
+    # the two ramps overlap: a cell at the onset would be only ~52% of the way to
+    # the pigment and would start turning white before it had ever shown the
+    # session's actual colour. The layers are stacked in the skin, so they stack
+    # here: pigment fills first, then leucophore is revealed on top of it.
+    p = min(1.0, e / _LEUCO_ONSET) if _LEUCO_ONSET > 0 else 1.0
     dh = (pigment.h - reveal.h + 180.0) % 360.0 - 180.0
-    return oklch_to_hex(OKLCh(
-        reveal.L + (pigment.L - reveal.L) * e,
-        reveal.C + (pigment.C - reveal.C) * e,
-        (reveal.h + dh * e) % 360.0,
-    ))
+    out = OKLCh(
+        reveal.L + (pigment.L - reveal.L) * p,
+        reveal.C + (pigment.C - reveal.C) * p,
+        (reveal.h + dh * p) % 360.0,
+    )
+    if e > _LEUCO_ONSET:
+        # Leucophore exposure: broadband white, keeping a trace of the hue so a
+        # highlight still belongs to this session rather than reading as a grey
+        # dead pixel.
+        k = (e - _LEUCO_ONSET) / (1.0 - _LEUCO_ONSET)
+        out = OKLCh(
+            out.L + (0.95 - out.L) * k * 0.85,
+            out.C * (1.0 - 0.55 * k),
+            out.h,
+        )
+    return oklch_to_hex(out)
 
 
 def render_half_blocks(

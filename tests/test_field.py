@@ -158,12 +158,44 @@ def test_retracted_cells_reveal_the_layer_beneath_not_black():
     assert r_fg != ("11", "21", "22")
 
 
-def test_expanded_cells_show_the_pigment():
-    line = render_half_blocks(Field.blank(1, 2, 1.0), pigment_hex=PIGMENT,
-                              sheen_hex=SHEEN, base_hex=GROUND)[0]
+def test_fully_expanded_cells_expose_leucophore_white():
+    """Past the leucophore onset a cell brightens toward broadband white.
+
+    This is the third dermal layer (Froesch & Messenger 1978): the bright patches
+    on a displaying cuttlefish are leucophores, NOT more pigment. Modelling only
+    pigment+iridophore capped the field at the pigment's own lightness (L~0.62)
+    and produced 0% bright pixels where the real animal measures 16.4%.
+    """
+    from cuttlefish_theme.color.oklab import hex_to_oklch
+
+    pig = hex_to_oklch(PIGMENT)
+    full = hex_to_oklch(_one_fg(Field.blank(1, 2, 1.0)))
+    assert full.L > pig.L, "full expansion must be brighter than the pigment alone"
+    assert full.C < pig.C, "a leucophore is broadband white, so chroma drops"
+
+
+def test_pigment_shows_at_the_leucophore_onset():
+    """Just below the onset, the cell IS the identity pigment.
+
+    The onset must not swallow the pigment entirely, or the field would never
+    show the session's actual colour — only its ground and its highlights.
+    """
+    from cuttlefish_theme.color.oklab import hex_to_oklch
+
+    from cuttlefish_theme.field import _LEUCO_ONSET
+
+    at_onset = hex_to_oklch(_one_fg(Field.blank(1, 2, _LEUCO_ONSET)))
+    pig = hex_to_oklch(PIGMENT)
+    assert abs(at_onset.L - pig.L) < 0.06
+    assert abs(((at_onset.h - pig.h + 180) % 360) - 180) < 12
+
+
+def _one_fg(field) -> str:
+    """The foreground hex of the first rendered cell."""
+    line = render_half_blocks(field, pigment_hex=PIGMENT, sheen_hex=SHEEN,
+                              base_hex=GROUND)[0]
     r, g, b = (int(v) for v in _ANSI.search(line).group(1, 2, 3))
-    want = (int(PIGMENT[1:3], 16), int(PIGMENT[3:5], 16), int(PIGMENT[5:7], 16))
-    assert max(abs(r - want[0]), abs(g - want[1]), abs(b - want[2])) <= 2
+    return "#%02X%02X%02X" % (r, g, b)
 
 
 def test_two_pixels_per_character_cell():
