@@ -9,7 +9,8 @@ anything at the root is shipped and imported at session start.
 | `sample_photos.py` | What does a real cuttlefish actually measure? Samples OKLCh statistics from photographs of *Metasepia pfefferi* in display. Every colour constant in `palette.py` and `field.py` traces back to its output. |
 | `render_chat.py` | Does the theme reach the whole UI? Renders a mock chat screen from the REAL resolved style dict, so an ignored key shows up as stock gold. |
 | `render_preview.py` | Does the pixel field look like skin? Rasterises the field and the transition curves to PNG, using the same compositor as the terminal. |
-| `render_demo_gif.py` | The README GIF. Renders the three-session identity + blanch + recover story, resolving every frame through the REAL skin engine so the demo cannot flatter the implementation. |
+| `record_demo_gif.py` | **The README GIF.** Records a real `hermes` session on a pty and replays the captured bytes through a small terminal emulator. If a colour is not on screen it cannot be in the GIF. |
+| `render_demo_gif.py` | *(superseded)* Composed the GIF from a mock chat layout. It could look perfect while the real terminal painted stock gold — which is what happened for four releases. Kept only as the palette-story renderer. |
 
 Run from the repo root:
 

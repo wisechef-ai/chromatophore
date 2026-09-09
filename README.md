@@ -6,7 +6,7 @@ Every chat session gets its own colour, its own near-black mantle, and its own p
 
 ![cuttlefish-theme demo](docs/demo.gif)
 
-*Three sessions, each with its own skin. A fault arrives and blanches the third one; when it clears, the identity comes back exactly. Every frame in that GIF is rendered from the real skin engine — nothing is mocked up.*
+*Recorded from a real `hermes` session on a pty — the frames are replayed terminal bytes, not a mockup, so what you see is exactly what the terminal painted. The pixel block is the session's **mantle**: 900 chromatophore cells, a different pattern for every session.*
 
 ```
 hermes cuttlefish watch      every session at once
