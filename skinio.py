@@ -94,6 +94,20 @@ def skins_dir(hermes_home: str | os.PathLike[str] | None = None) -> Path:
     return root / "skins"
 
 
+def stable_skin_name() -> str:
+    """The ONE skin name `display.skin` points at, for the life of the install.
+
+    Session-scoped names cannot work for the ACTIVE skin: `init_skin_from_config`
+    resolves `display.skin` at CLI startup, before any session exists, so a name
+    containing a session id resolves to nothing and the CLI silently falls back to
+    the stock `default` palette. That is precisely the bug that made the theme
+    invisible. See bootstrap.py for the full account.
+    """
+    from .bootstrap import STABLE_SKIN
+
+    return STABLE_SKIN
+
+
 def session_skin_name(session_id: str) -> str:
     """Skin name for a session. Prefixed so `sweep_orphans` can identify what we own
     and, crucially, never delete a skin the user wrote by hand."""
@@ -132,6 +146,7 @@ def write_skin(
     extra: Mapping[str, Any] | None = None,
     tint_background: bool = True,
     durable: bool = True,
+    name: str | None = None,
 ) -> Path:
     """Materialise *palette* into its session skin file, atomically.
 
@@ -148,6 +163,7 @@ def write_skin(
         description=f"cuttlefish session {palette.session_id} ({palette.signal.value})",
         hermes_home=hermes_home,
         durable=durable,
+        name=name,
     )
 
 
@@ -158,6 +174,7 @@ def write_colors(
     description: str = "",
     hermes_home: str | os.PathLike[str] | None = None,
     durable: bool = True,
+    name: str | None = None,
 ) -> Path:
     """Atomically write a raw colour mapping as this session's skin.
 
@@ -172,7 +189,7 @@ def write_colors(
     ``durable=True``. Measured on this box the fsync costs ~4ms of an ~11.7ms
     frame, so dropping it for in-flight frames is a third of the animation budget.
     """
-    name = session_skin_name(session_id)
+    name = name or session_skin_name(session_id)
     directory = skins_dir(hermes_home)
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{name}.yaml"
@@ -233,7 +250,10 @@ def sweep_orphans(
     if not directory.is_dir():
         return []
 
-    keep = {session_skin_name(s) for s in live_session_ids}
+    # The stable skin is what `display.skin` resolves at startup; reclaiming it
+    # would leave the next CLI launch with nothing to load and it would fall back
+    # to stock gold — the original bug, reintroduced by the cleanup path.
+    keep = {session_skin_name(s) for s in live_session_ids} | {stable_skin_name()}
     removed: list[Path] = []
     for path in directory.glob(f"{_PREFIX}*.yaml"):
         if path.is_symlink() or not path.is_file():

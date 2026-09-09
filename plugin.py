@@ -31,7 +31,9 @@ from .color.identity import allocate
 from .live import DEFAULT_FPS, WATCH_INTERVAL, Animator, apply_palette_now
 from .pattern import render
 from .session import Signal, snapshot
-from .skinio import remove_skin, session_skin_name, sweep_orphans, write_skin
+from .bootstrap import ensure_configured
+from .skinio import (remove_skin, session_skin_name, stable_skin_name,
+                      sweep_orphans, write_skin)
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +162,17 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
     except Exception:
         logger.debug("cuttlefish: orphan sweep failed", exc_info=True)
 
-    skin_name = session_skin_name(session_id)
+    # THE ACTIVE SKIN IS THE STABLE ONE, not a per-session name. `display.skin`
+    # is resolved at CLI startup before any session exists, so a session-scoped
+    # name resolves to nothing and the CLI falls back to stock gold. bootstrap.py
+    # documents the whole failure.
+    skin_name = stable_skin_name()
+    try:
+        report = ensure_configured()
+        if report["state"] not in ("configured", "already-configured"):
+            logger.debug("cuttlefish: display.skin not ours: %s", report)
+    except Exception:
+        logger.debug("cuttlefish: ensure_configured failed", exc_info=True)
 
     animator = Animator(
         compute=lambda: _compute_palette(session_id),
@@ -176,6 +188,10 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
     # prompt, rather than plain until the first watch tick.
     try:
         palette = _compute_palette(session_id)
+        # Write BOTH: the stable skin (what the CLI resolves) and the per-session
+        # file (what `watch` reads for other sessions).
+        write_skin(palette, tint_background=settings["tint_background"],
+                   name=skin_name)
         write_skin(palette, tint_background=settings["tint_background"])
         apply_palette_now(palette, skin_name)
         if settings["banner"]:
@@ -197,18 +213,14 @@ def on_session_end(session_id: str = "", **_kw) -> None:
     if not sid:
         return
 
-    ours = session_skin_name(sid)
-    previous = _state.get("previous_skin")
-    # Compare-and-set: only restore if OUR skin is still the active one. If the
-    # user switched skins mid-session, that choice wins.
-    if previous and _current_skin_name() == ours:
-        try:
-            from hermes_cli.skin_engine import set_active_skin
-
-            set_active_skin(previous)
-        except Exception:
-            logger.debug("cuttlefish: skin restore failed", exc_info=True)
-
+    # The STABLE skin is deliberately NOT removed and `display.skin` is NOT
+    # reverted. v4 deleted the active skin here, so the next CLI startup resolved
+    # a name whose file no longer existed and silently fell back to stock gold —
+    # the whole reason the theme looked like it "did nothing". The stable skin is
+    # this install's theme now; uninstalling is `hermes config set display.skin
+    # default`, which `legend` and `doctor` both state.
+    #
+    # Only the PER-SESSION file is cleaned up; it exists for the `watch` board.
     try:
         remove_skin(sid)
     except Exception:
