@@ -14,7 +14,6 @@ import os
 import pathlib
 import sys
 import tempfile
-import time
 
 # Isolate: never touch the developer's real ~/.hermes.
 HOME = tempfile.mkdtemp(prefix="cuttle-live-proof-")

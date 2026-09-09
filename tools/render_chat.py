@@ -13,9 +13,9 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.expanduser("~/.hermes/hermes-agent"))
-import conftest  # noqa: F401,E402
+import conftest  # noqa: F401,E402  # side-effect: binds the cuttlefish_theme package
 
 from PIL import Image, ImageDraw, ImageFont  # noqa: E402
 

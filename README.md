@@ -172,7 +172,7 @@ make test        # lint + suite + all proofs
 - `tests/proofs/live_repaint_proof.py` — the chronic/acute cycle against the real skin engine.
 - `tests/proofs/running_app_proof.py` — the CLI-resolution path.
 
-`render_preview.py` rasterises the field to PNG, using the same compositor as the terminal, for judging appearance without a tty.
+`tools/render_preview.py` rasterises the field to PNG, using the same compositor as the terminal, for judging appearance without a tty.
 
 ### A note on `pytest.ini`
 

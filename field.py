@@ -49,7 +49,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Callable, Iterable, Sequence
+from typing import Callable
 
 from .color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
 

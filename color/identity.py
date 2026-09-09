@@ -32,7 +32,6 @@ guaranteed floor is reported so callers can tell the truth about it.
 
 from __future__ import annotations
 
-import colorsys
 import hashlib
 from dataclasses import dataclass
 from typing import Iterable, Sequence
