@@ -128,12 +128,28 @@ def _yaml_quote(value: str) -> str:
     return f'"{value}"'
 
 
-def _render_yaml(name: str, colors: Mapping[str, str], description: str) -> str:
+def _yaml_block(key: str, text: str) -> str:
+    """A literal block scalar. Used for the banner art, which is multi-line Rich
+    markup full of quotes and brackets — quoting that inline would be fragile."""
+    body = "\n".join("  " + line for line in text.split("\n"))
+    return f"{key}: |\n{body}"
+
+
+def _render_yaml(name: str, colors: Mapping[str, str], description: str,
+                 *, banner_logo: str = "", banner_hero: str = "") -> str:
     lines = [
         f"name: {_yaml_quote(name)}",
         f"description: {_yaml_quote(description)}",
-        "colors:",
     ]
+    # The banner ASCII art hardcodes its own gold gradient in banner.py, so the
+    # colour keys alone cannot reach it; these two whole-string overrides are the
+    # only way in. Written BEFORE colors: so a truncated file is still obviously
+    # broken rather than subtly half-themed.
+    if banner_logo:
+        lines.append(_yaml_block("banner_logo", banner_logo))
+    if banner_hero:
+        lines.append(_yaml_block("banner_hero", banner_hero))
+    lines.append("colors:")
     for key in sorted(colors):
         lines.append(f"  {key}: {_yaml_quote(colors[key])}")
     return "\n".join(lines) + "\n"
@@ -147,6 +163,7 @@ def write_skin(
     tint_background: bool = True,
     durable: bool = True,
     name: str | None = None,
+    with_banner: bool = True,
 ) -> Path:
     """Materialise *palette* into its session skin file, atomically.
 
@@ -157,6 +174,19 @@ def write_skin(
     colors.update(palette.skin_colors(tint_background=tint_background))
     if extra:
         colors.update({k: str(v) for k, v in extra.items()})
+    logo = hero = ""
+    if with_banner:
+        try:
+            from .banner import banner_hero as _hero
+            from .banner import banner_logo as _logo
+
+            seed = abs(hash(palette.session_id)) & 0xFFFFFFFF
+            logo = _logo(palette.identity_hex)
+            hero = _hero(palette.identity_hex, palette.sheen_hex,
+                         colors.get("background", "#0B0B0D"), seed=seed)
+        except Exception:  # pragma: no cover - art is cosmetic, never fatal
+            logo = hero = ""
+
     return write_colors(
         palette.session_id,
         colors,
@@ -164,6 +194,8 @@ def write_skin(
         hermes_home=hermes_home,
         durable=durable,
         name=name,
+        banner_logo=logo,
+        banner_hero=hero,
     )
 
 
@@ -175,6 +207,8 @@ def write_colors(
     hermes_home: str | os.PathLike[str] | None = None,
     durable: bool = True,
     name: str | None = None,
+    banner_logo: str = "",
+    banner_hero: str = "",
 ) -> Path:
     """Atomically write a raw colour mapping as this session's skin.
 
@@ -194,7 +228,8 @@ def write_colors(
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / f"{name}.yaml"
 
-    body = _render_yaml(name, colors, description or f"cuttlefish session {session_id}")
+    body = _render_yaml(name, colors, description or f"cuttlefish session {session_id}",
+                        banner_logo=banner_logo, banner_hero=banner_hero)
 
     # Same directory as the target: os.replace is only atomic within a filesystem,
     # and /tmp is frequently a different one.
