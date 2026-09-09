@@ -32,8 +32,9 @@ from .live import DEFAULT_FPS, WATCH_INTERVAL, Animator, apply_palette_now
 from .pattern import render
 from .session import Signal, snapshot
 from .bootstrap import ensure_configured
-from .skinio import (remove_skin, session_skin_name, stable_skin_name,
-                      sweep_orphans, write_skin)
+from .termbg import reset_terminal_background, set_terminal_background
+from .skinio import (remove_skin, stable_skin_name, sweep_orphans,
+                      write_skin)
 
 logger = logging.getLogger(__name__)
 
@@ -56,8 +57,11 @@ _DEFAULTS = {
     "tint_background": True,  # per-session near-black mantle
     "fps": DEFAULT_FPS,
     "watch_interval": WATCH_INTERVAL,
-    "banner": True,           # print the pixel field at session start
-    "banner_height": 8,       # pixel rows (renders as half that in text rows)
+    # Paint the TERMINAL's own background via OSC 11. The classic CLI cannot set
+    # an app background (its `input-area` style is deliberately empty so typed
+    # text keeps your terminal's colours), so this is the only honest way to make
+    # the window itself carry the session's near-black.
+    "terminal_background": True,
 }
 
 
@@ -120,33 +124,6 @@ def _compute_palette(session_id: str, signal: Signal = Signal.RESTING):
     return render(identity, signal, age_label=age)
 
 
-def _print_banner(palette, height: int) -> None:
-    """Paint the session's chromatophore field once, at session start.
-
-    This is the "a lot of pixels" surface: the skin's 28 semantic keys are a
-    palette, not a canvas, so the real grid is text we emit at truecolor. Printed
-    once rather than kept live — the animal is static at rest, and so is this.
-    """
-    import shutil
-
-    from .field import mottle, render_half_blocks
-
-    try:
-        width = min(64, max(24, shutil.get_terminal_size((80, 24)).columns - 4))
-    except Exception:
-        width = 48
-    height = max(2, min(24, height))
-    field = mottle(width, height, seed=abs(hash(palette.session_id)) & 0xFFFFFFFF)
-    lines = render_half_blocks(
-        field,
-        pigment_hex=palette.identity_hex,
-        sheen_hex=palette.sheen_hex,
-        base_hex=palette.ground_hex,
-    )
-    for line in lines:
-        print(line)
-
-
 def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
     """Claim an identity and settle into it."""
     if not session_id:
@@ -194,8 +171,9 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
                    name=skin_name)
         write_skin(palette, tint_background=settings["tint_background"])
         apply_palette_now(palette, skin_name)
-        if settings["banner"]:
-            _print_banner(palette, settings["banner_height"])
+        if settings["terminal_background"]:
+            set_terminal_background(palette.skin_colors(
+                tint_background=True).get("background"))
     except Exception:
         logger.debug("cuttlefish: initial paint failed", exc_info=True)
 
@@ -220,6 +198,14 @@ def on_session_end(session_id: str = "", **_kw) -> None:
     # this install's theme now; uninstalling is `hermes config set display.skin
     # default`, which `legend` and `doctor` both state.
     #
+    # Hand the terminal's own background back. OSC 11 is a real change to the
+    # emulator's state, not a repaint we own, so leaving it set would follow the
+    # user out of Hermes into their shell.
+    try:
+        reset_terminal_background()
+    except Exception:
+        logger.debug("cuttlefish: terminal background reset failed", exc_info=True)
+
     # Only the PER-SESSION file is cleaned up; it exists for the `watch` board.
     try:
         remove_skin(sid)

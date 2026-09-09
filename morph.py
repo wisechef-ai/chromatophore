@@ -158,6 +158,14 @@ class Trajectory:
 
         if self.intermittent:
             u = _intermittent(u, seed=seed)
+        # Clamp before the power. `_intermittent` sums per-segment fractions and
+        # can land on 1.0000000000000002 (measured: ~3% of samples), which makes
+        # (1 - u) a tiny NEGATIVE number — and in Python a negative base to a
+        # fractional exponent returns a COMPLEX number rather than raising. That
+        # complex then propagates silently into `morph`, where the first
+        # comparison against a float raises TypeError and takes the whole command
+        # down. `hermes cuttlefish demo` crashed exactly this way.
+        u = 0.0 if u < 0.0 else (1.0 if u > 1.0 else u)
         # Deceleration into the target. exponent > 1 on (1-u) => ease-out.
         return 1.0 - (1.0 - u) ** self.decelerate
 

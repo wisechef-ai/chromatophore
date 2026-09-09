@@ -13,8 +13,8 @@ import pytest
 
 from cuttlefish_theme.color.oklab import hex_to_oklch
 from cuttlefish_theme.morph import (BLANCH, RECOVER, SETTLE, Trajectory,
-                                    components, frame_count, frames,
-                                    lerp_oklch, morph)
+                                    _intermittent, components, frame_count,
+                                    frames, lerp_oklch, morph)
 
 START = {
     "ui_accent": "#2F9C9F",
@@ -95,6 +95,61 @@ def test_pauses_lengthen_as_convergence_nears():
     early_still = sum(1 for d in deltas[:half] if d <= 1e-9)
     late_still = sum(1 for d in deltas[half:] if d <= 1e-9)
     assert late_still > early_still
+
+
+@pytest.mark.parametrize("trajectory", [BLANCH, RECOVER, SETTLE])
+def test_progress_is_always_a_real_number(trajectory: Trajectory):
+    """progress() must never return a complex number.
+
+    REGRESSION (found by Adam running `hermes cuttlefish demo`, which crashed
+    with "'>=' not supported between instances of 'complex' and 'float'"):
+    `_intermittent` sums per-segment fractions and can return 1.0000000000000002.
+    That makes (1 - u) a tiny NEGATIVE float, and Python evaluates a negative base
+    to a fractional power as a COMPLEX number instead of raising. The complex value
+    then travels silently through morph() until the first float comparison blows up
+    — far from the cause.
+
+    Swept densely across phases and seeds because the overflow only appeared in
+    ~3% of samples and needed a specific (seed, key) pair to surface.
+    """
+    for phase_i in range(0, 11):
+        phase = phase_i / 10.0
+        for i in range(0, 401):
+            t = trajectory.duration * i / 400.0
+            for seed in ("settle   session begins", ("x", "completion_menu_current_bg"), 7):
+                p = trajectory.progress(t, phase, seed=seed)
+                assert isinstance(p, float), f"got {p!r} at t={t}, phase={phase}"
+                assert 0.0 <= p <= 1.0, f"out of range: {p!r}"
+
+
+def test_intermittent_never_exceeds_one_downstream():
+    """The specific arithmetic that produced the crash, pinned directly."""
+    for key in ("completion_menu_current_bg", "status_bar_bg", "prompt", "a"):
+        for i in range(0, 2001):
+            u = i / 2000.0
+            v = _intermittent(u, seed=("settle   session begins", key))
+            # v itself may overshoot by an ulp; what must hold is that progress()
+            # absorbs it rather than handing a negative base to `**`.
+            assert not isinstance((1.0 - min(1.0, max(0.0, v))) ** 1.8, complex)
+
+
+def test_demo_palettes_morph_without_crashing():
+    """End-to-end guard on the exact call `hermes cuttlefish demo` makes."""
+    from cuttlefish_theme.color.identity import allocate
+    from cuttlefish_theme.pattern import render
+    from cuttlefish_theme.session import Signal
+
+    ident = allocate("sess-demo")
+    calm = render(ident, Signal.RESTING).skin_colors()
+    alarm = render(ident, Signal.FAULT).skin_colors()
+    for label, traj, a, b in (
+            ("blanch   fault arrives ", BLANCH, calm, alarm),
+            ("recover  fault clears  ", RECOVER, alarm, calm),
+            ("settle   session begins", SETTLE, alarm, calm)):
+        for i in range(0, 200):
+            frame = morph(a, b, traj, traj.duration * i / 199.0, seed=label)
+            for value in frame.values():
+                assert len(value) == 7 and value[0] == "#"
 
 
 @pytest.mark.parametrize("trajectory", [BLANCH, RECOVER, SETTLE])
