@@ -17,4 +17,4 @@ The plugin entrypoint Hermes looks for is `register(ctx)`, re-exported here from
 from .plugin import register
 
 __all__ = ["register"]
-__version__ = "0.2.0"
+__version__ = "0.4.0"
