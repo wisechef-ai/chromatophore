@@ -185,36 +185,22 @@ def test_separator_is_a_row_of_chromatophores_of_terminal_width():
     assert separator("zivyra", "needs-me", 100) != row
 
 
-def test_stream_end_hook_prints_through_rich_only_on_a_tty(monkeypatch, capsys):
+def test_no_plugin_output_lands_in_the_transcript():
+    """The Tier-A printed separator shipped once and its escape bytes showed up
+    as literal ?[38;5;... garbage in the session log — the 'stdout is a
+    transcript' trap from v5, again. With Tier B painting the input rule, the
+    plugin prints NOTHING per response; the transcript stays byte-clean."""
     from cuttlefish_theme import plugin
 
-    printed = []
-
-    class FakeConsole:
-        is_terminal = True
-        no_color = False
-        width = 64
-        def print(self, *a, **k):
-            printed.append((a, k))
-
-    monkeypatch.setattr(plugin, "_console", lambda: FakeConsole())
-    # exact payload the core sends (agent/stream_delivery.py::_emit_stream_end)
-    plugin.on_stream_end(turn_id="t1", iteration=1, session_id="zivyra", model="m",
-                         provider="p", surface="cli", final_text="hi", finished=True, error=None)
-    assert len(printed) == 1
-    assert "\x1b[" not in capsys.readouterr().out  # never raw ANSI on stdout
-
-    printed.clear()
-    class NoTTY(FakeConsole):
-        is_terminal = False
-    monkeypatch.setattr(plugin, "_console", lambda: NoTTY())
-    plugin.on_stream_end(session_id="zivyra", surface="cli", finished=True, error=None)
-    assert printed == []
-
-    printed.clear()
-    monkeypatch.setattr(plugin, "_console", lambda: FakeConsole())
-    plugin.on_stream_end(session_id="zivyra", surface="discord", finished=True, error=None)
-    assert printed == []  # only the classic CLI has a screen
+    hooks = []
+    class Ctx:
+        def register_hook(self, name, fn): hooks.append(name)
+        def register_cli_command(self, *a, **k): pass
+        def get_config(self, k, d=None): return d
+    plugin.register(Ctx())
+    assert "on_stream_end" not in hooks
+    assert not hasattr(plugin, "on_stream_end")
+    assert not hasattr(plugin, "_console")
 
 
 # ------------------------------------------------ (6) tier B = skin data, not a hook

@@ -25,16 +25,15 @@ took if nothing else has changed it since.
 from __future__ import annotations
 
 import logging
-from typing import Any, Optional
+from typing import Any
 
+from .bootstrap import ensure_configured
 from .color.identity import allocate
 from .live import DEFAULT_FPS, WATCH_INTERVAL, Animator, apply_palette_now
 from .pattern import render
 from .session import Signal, snapshot
-from .bootstrap import ensure_configured
+from .skinio import remove_skin, stable_skin_name, sweep_orphans, write_skin
 from .termbg import reset_terminal_background, set_terminal_background
-from .skinio import (remove_skin, stable_skin_name, sweep_orphans,
-                      write_skin)
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +100,7 @@ def _settings(ctx=None) -> dict[str, Any]:
     return values
 
 
-def _current_skin_name() -> Optional[str]:
+def _current_skin_name() -> str | None:
     try:
         from hermes_cli.skin_engine import get_active_skin_name
 
@@ -184,23 +183,6 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
         logger.debug("cuttlefish: initial paint failed", exc_info=True)
 
     animator.start()
-
-
-def on_stream_end(session_id: str = "", console=None, signal=Signal.RESTING,
-                  surface: str = "cli", finished: bool = False, error=None,
-                  **_kw) -> None:
-    """Print a Rich separator only after finished interactive CLI streams."""
-    if not session_id or surface != "cli" or not finished or error is not None:
-        return
-    console = console or _console()
-    if getattr(console, "no_color", False) or not getattr(console, "is_terminal", False):
-        return
-    try:
-        from .linework import separator
-        width = int(getattr(console, "width", 80) or 80)
-        console.print(separator(session_id, signal, width), markup=True, soft_wrap=True)
-    except Exception:
-        logger.debug("cuttlefish: stream separator failed", exc_info=True)
 
 
 def on_session_end(session_id: str = "", **_kw) -> None:
@@ -289,8 +271,7 @@ def register(ctx) -> None:
         logger.debug("cuttlefish: CLI registration unavailable", exc_info=True)
 
     for hook, fn in (("on_session_start", on_session_start),
-                     ("on_session_end", on_session_end),
-                     ("on_stream_end", on_stream_end)):
+                     ("on_session_end", on_session_end)):
         try:
             ctx.register_hook(hook, fn)
         except Exception:
