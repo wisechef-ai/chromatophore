@@ -288,14 +288,6 @@ def register(ctx) -> None:
     except Exception:
         logger.debug("cuttlefish: CLI registration unavailable", exc_info=True)
 
-    # Tier B is optional and additive: older cores stay Tier A byte-for-byte.
-    if hasattr(ctx, "register_chrome_renderer"):
-        try:
-            from .chrome import chrome_renderer
-            ctx.register_chrome_renderer(chrome_renderer)
-        except Exception:
-            logger.debug("cuttlefish: chrome renderer unavailable", exc_info=True)
-
     for hook, fn in (("on_session_start", on_session_start),
                      ("on_session_end", on_session_end),
                      ("on_stream_end", on_stream_end)):

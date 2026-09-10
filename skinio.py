@@ -136,7 +136,7 @@ def _yaml_block(key: str, text: str) -> str:
 
 
 def _render_yaml(name: str, colors: Mapping[str, str], description: str,
-                 *, banner_logo: str = "", banner_hero: str = "") -> str:
+                 *, banner_logo: str = "", banner_hero: str = "", input_rule_art: str = "") -> str:
     lines = [
         f"name: {_yaml_quote(name)}",
         f"description: {_yaml_quote(description)}",
@@ -149,6 +149,8 @@ def _render_yaml(name: str, colors: Mapping[str, str], description: str,
         lines.append(_yaml_block("banner_logo", banner_logo))
     if banner_hero:
         lines.append(_yaml_block("banner_hero", banner_hero))
+    if input_rule_art:
+        lines.append(f"input_rule_art: {_yaml_quote(input_rule_art)}")
     lines.append("colors:")
     for key in sorted(colors):
         lines.append(f"  {key}: {_yaml_quote(colors[key])}")
@@ -174,8 +176,14 @@ def write_skin(
     colors.update(palette.skin_colors(tint_background=tint_background))
     if extra:
         colors.update({k: str(v) for k, v in extra.items()})
-    logo = hero = ""
+    logo = hero = rule = ""
     if with_banner:
+        try:
+            from .linework import separator
+            rule = separator(palette.session_id, palette.signal.value, 200)
+        except Exception:
+            rule = ""
+
         try:
             from .banner import banner_logo as _logo
             from .mantle import mantle_rows
@@ -204,6 +212,7 @@ def write_skin(
         name=name,
         banner_logo=logo,
         banner_hero=hero,
+        input_rule_art=rule,
     )
 
 
@@ -217,6 +226,7 @@ def write_colors(
     name: str | None = None,
     banner_logo: str = "",
     banner_hero: str = "",
+    input_rule_art: str = "",
 ) -> Path:
     """Atomically write a raw colour mapping as this session's skin.
 
@@ -237,7 +247,8 @@ def write_colors(
     target = directory / f"{name}.yaml"
 
     body = _render_yaml(name, colors, description or f"cuttlefish session {session_id}",
-                        banner_logo=banner_logo, banner_hero=banner_hero)
+                        banner_logo=banner_logo, banner_hero=banner_hero,
+                        input_rule_art=input_rule_art)
 
     # Same directory as the target: os.replace is only atomic within a filesystem,
     # and /tmp is frequently a different one.

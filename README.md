@@ -104,7 +104,7 @@ The VTE has no wallpaper surface available to a plugin. The field therefore live
 
 The six deterministic body patterns are **uniform fine mottle**, **coarse mottle**, **transverse stripes/zebra**, **passing cloud bands**, **disruptive patches**, and **pearl scatter**. Each is built from the field's coherent value-noise octaves and selected by the session's blake2b seed.
 
-This plugin has two tiers. **Tier A** works on every Hermes core: single-colour skin chrome plus Rich-rendered banner/logo and separator rows after responses. **Tier B** is detected at registration when `ctx.register_chrome_renderer` exists; it supplies per-cell prompt-toolkit fragments for input-rule top/bottom and status-bar surfaces. Without that capability, Tier A is unchanged.
+This plugin has two tiers. **Tier A** works on every Hermes core: single-colour skin chrome plus Rich-rendered banner/logo and separator rows after responses. **Tier B** writes the whole-string `input_rule_art` skin data field (a 200-cell chromatophore separator); older cores ignore that unknown field and keep the plain rule.
 
 Turn off `tint_background` if you have a strong terminal theme of your own.
 

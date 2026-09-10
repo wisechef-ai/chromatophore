@@ -124,4 +124,26 @@ for row, (label, traj, a, b) in enumerate((
                fill=(150, 145, 140))
 img.save("/tmp/cuttle_transitions.png")
 
-print("wrote /tmp/cuttle_identities.png /tmp/cuttle_wave.png /tmp/cuttle_transitions.png")
+# --- 4. v6 acceptance sheet: six sessions x three signals -------------------
+# Keep this as an additive section: the three diagnostic previews above remain
+# useful for comparing identities, waves, and transitions.
+from cuttlefish_theme.patterns import field_for
+from cuttlefish_theme.palette import pigment_hex, dominant_pigments
+
+sheet_sessions = ["zivyra", "tilola", "nygoka", "brepen", "safira", "lumeko"]
+sheet_signals = [Signal.RESTING, Signal.NEEDS_ME, Signal.FAULT]
+cell_w, cell_h, gap = 180, 130, 18
+sheet = Image.new("RGB", (len(sheet_signals) * cell_w + (len(sheet_signals) + 1) * gap,
+                           len(sheet_sessions) * cell_h + (len(sheet_sessions) + 1) * gap), (8, 10, 20))
+d = ImageDraw.Draw(sheet)
+for iy, sid in enumerate(sheet_sessions):
+    for ix, sig in enumerate(sheet_signals):
+        x0 = gap + ix * (cell_w + gap)
+        y0 = gap + iy * (cell_h + gap)
+        rows, pal = field_rows(sid, 20, 12, signal=sig)
+        paste(sheet, rows, x0, y0, scale=6)
+        d.text((x0, y0 + 76), f"{sid} · {sig.value}", font=font(10), fill=(235, 230, 220))
+        d.text((x0, y0 + 94), " / ".join(dominant_pigments(sid)), font=font(9), fill=(150, 145, 140))
+sheet.save("docs/preview-v6.png")
+
+print("wrote /tmp/cuttle_identities.png /tmp/cuttle_wave.png /tmp/cuttle_transitions.png docs/preview-v6.png")
