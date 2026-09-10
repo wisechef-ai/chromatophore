@@ -20,6 +20,7 @@ from cuttlefish_theme.field import (mottle, passing_cloud,  # noqa: E402
 from cuttlefish_theme.morph import BLANCH, RECOVER, morph  # noqa: E402
 from cuttlefish_theme.naming import session_name  # noqa: E402
 from cuttlefish_theme.pattern import render  # noqa: E402
+from cuttlefish_theme.seed import seed_for  # noqa: E402
 from cuttlefish_theme.session import Signal  # noqa: E402
 
 ANSI = re.compile(r"\x1b\[38;2;(\d+);(\d+);(\d+)m\x1b\[48;2;(\d+);(\d+);(\d+)m\u2580")
@@ -52,7 +53,7 @@ def paste(img, rows, ox, oy, scale=SCALE):
 def field_rows(session_id, width, height, t=None, signal=Signal.RESTING):
     ident = allocate(session_id)
     p = render(ident, signal)
-    seed = abs(hash(session_id)) & 0xFFFFFFFF
+    seed = seed_for(session_id)
     f = mottle(width, height, seed=seed)
     if t is not None:
         f = passing_cloud(f, t, seed=seed)

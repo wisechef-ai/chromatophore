@@ -17,6 +17,7 @@ import time
 
 from .color.identity import allocate
 from .naming import session_name
+from .seed import seed_for
 from .session import Signal, snapshot
 
 __all__ = ["run_watch", "run_legend", "run_doctor", "run_demo", "run_skin"]
@@ -212,7 +213,7 @@ def run_skin(*, height: int = 16, wave: bool = False) -> int:
     palette = render(ident)
     width = min(72, max(24, shutil.get_terminal_size((80, 24)).columns - 4))
     height = max(2, min(48, height))
-    seed = abs(hash(session_id)) & 0xFFFFFFFF
+    seed = seed_for(session_id)
     base = mottle(width, height, seed=seed)
 
     def paint(field) -> list[str]:

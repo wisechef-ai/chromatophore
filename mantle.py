@@ -52,6 +52,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .color.oklab import OKLCh, hex_to_oklch
+from .seed import seed_for
 
 __all__ = ["mantle_rows", "pigment_set", "MANTLE_WIDTH", "MANTLE_HEIGHT"]
 
@@ -208,7 +209,7 @@ def mantle_rows(
     """
     from .field import _smooth_noise, mottle
 
-    seed = abs(hash(session_id)) & 0xFFFFFFFF
+    seed = seed_for(session_id)
     # THE FIELD IS CUTTLEFISH SKIN, not a nebula. Adam, 2026-09-09: "dont focus
     # much about the nebulas the pattern should be still the cuttlefish ... the
     # whole project is about cuttlefishes". The nebula version (off-centre core
