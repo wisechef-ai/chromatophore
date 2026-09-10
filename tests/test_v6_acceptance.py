@@ -172,6 +172,11 @@ def test_separator_is_a_row_of_chromatophores_of_terminal_width():
     txt = Text.from_markup(row)
     assert txt.cell_len == 100
     assert len(set(_HEX.findall(row))) >= 8
+    # Rich must actually PARSE the tags: a tag Rich ignores yields an empty
+    # Style and the art paints styleless (the Chef Tier-B failure).
+    from rich.console import Console
+    styled = sum(1 for i in range(100) if txt.get_style_at_offset(Console(), i).color)
+    assert styled == 100, f"{styled}/100 cells carry colour"
     # not a smooth ramp: adjacent cells must change colour often
     cells = _HEX.findall(row)
     changes = sum(a != b for a, b in pairwise(cells))
@@ -230,6 +235,8 @@ def test_skin_file_carries_input_rule_art_and_older_cores_ignore_it(tmp_path, mo
     assert isinstance(art, str) and "\n" not in art
     txt = Text.from_markup(art)
     assert txt.cell_len >= 200                      # the core tiles/clips to width
+    from rich.console import Console
+    assert all(txt.get_style_at_offset(Console(), i).color for i in range(200))
     assert len(set(_HEX.findall(art))) >= 8         # rows of chromatophores, not a line
     assert data["banner_hero"] and data["banner_logo"]  # the two precedents still present
     # the installed core (any version) loads the file without choking on the key
