@@ -196,8 +196,8 @@ with create_pipe_input() as pipe_input:
     _i = _h2o(RESTING.identity_hex)
     _dg = abs(((_g.h - _i.h + 180) % 360) - 180)
     check("background is near-black", _g.L < 0.30, f"{ground} L {_g.L:.3f}")
-    check("background carries this session's hue", _dg < 30,
-          f"{ground} h{_g.h:.0f} vs identity h{_i.h:.0f}")
+    check("background has the shared navy hue", abs(((_g.h - 270 + 180) % 360) - 180) < 12,
+          f"{ground} h{_g.h:.0f} (required h270)")
 
     # --- 5. the steady state is genuinely free ------------------------------
     idle_before = len(cli.styles)

@@ -67,6 +67,7 @@ from typing import Mapping
 
 from .color.oklab import OKLCh, oklch_to_hex
 from .color.terminal import contrast_ratio, ensure_contrast
+from .seed import seed_for
 
 __all__ = [
     "build_palette",
@@ -109,8 +110,24 @@ KEY_FANOUT: Mapping[str, int] = {
 
 ENGINE_KEYS = frozenset(KEY_FANOUT)
 
-# The pigment arc, in OKLCh hue degrees. Identity must never be allocated here.
+# Identity allocation still avoids this semantic warm arc.
 PIGMENT_ARC = (18.0, 105.0)
+
+PIGMENTS = {
+    "cyan": 188.0, "teal": 174.0, "electric-blue": 245.0,
+    "violet": 285.0, "magenta": 325.0, "amber": 78.0, "orange": 48.0,
+    "pearl-white": None,
+}
+
+
+def dominant_pigments(session_id: str) -> tuple[str, ...]:
+    """Stable 2–3 dominant chromatophore hues for a session."""
+    n = seed_for(session_id)
+    names = tuple(PIGMENTS)
+    start = n % (len(names) - 2)
+    count = 2 + ((n >> 8) & 1)
+    return tuple(names[(start + i * 2) % (len(names) - 1)] for i in range(count))
+
 
 # Fixed semantic anchors. Deliberately differing in LIGHTNESS as well as hue:
 # under deuteranopia red and green converge in hue, so lightness is what keeps
@@ -238,7 +255,7 @@ def build_palette(
     # detectable on a large flat field — it reads as black, with just enough cast
     # to avoid the deadness of pure #000000 and to keep the mantle from looking
     # pasted on.
-    ground = OKLCh(0.180, 0.008, ground_h)
+    ground = OKLCh(0.155, 0.008, 270.0)
     ground_hex = oklch_to_hex(ground)
 
     # Bars sit slightly above the ground so they read as a surface ON the skin

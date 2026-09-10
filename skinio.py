@@ -180,7 +180,7 @@ def write_skin(
             from .banner import banner_logo as _logo
             from .mantle import mantle_rows
 
-            logo = _logo(palette.identity_hex)
+            logo = _logo(palette.identity_hex, palette.session_id)
             # The mantle IS the hero. It drops into the caduceus' slot in
             # banner.py's two-column layout, so the session's chromatophore
             # pattern is on screen every time the banner draws — session start

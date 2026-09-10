@@ -180,6 +180,21 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
     animator.start()
 
 
+def on_stream_end(session_id: str = "", console=None, signal=Signal.RESTING,
+                  **_kw) -> None:
+    """Tier-A separator after assistant output, only on interactive colour consoles."""
+    if not session_id or console is None:
+        return
+    if getattr(console, "no_color", False) or not getattr(console, "is_terminal", False):
+        return
+    try:
+        from .linework import separator
+        width = int(getattr(console, "width", 80) or 80)
+        console.print(separator(session_id, signal, width), markup=True, soft_wrap=True)
+    except Exception:
+        logger.debug("cuttlefish: stream separator failed", exc_info=True)
+
+
 def on_session_end(session_id: str = "", **_kw) -> None:
     """Stop the animator and hand the terminal back exactly as we found it."""
     animator = _state.get("animator")
@@ -265,8 +280,17 @@ def register(ctx) -> None:
     except Exception:
         logger.debug("cuttlefish: CLI registration unavailable", exc_info=True)
 
+    # Tier B is optional and additive: older cores stay Tier A byte-for-byte.
+    if hasattr(ctx, "register_chrome_renderer"):
+        try:
+            from .chrome import chrome_renderer
+            ctx.register_chrome_renderer(chrome_renderer)
+        except Exception:
+            logger.debug("cuttlefish: chrome renderer unavailable", exc_info=True)
+
     for hook, fn in (("on_session_start", on_session_start),
-                     ("on_session_end", on_session_end)):
+                     ("on_session_end", on_session_end),
+                     ("on_stream_end", on_stream_end)):
         try:
             ctx.register_hook(hook, fn)
         except Exception:

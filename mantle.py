@@ -207,7 +207,8 @@ def mantle_rows(
     escape sequences would be escaped and printed literally there.
     `markup=False` gives ANSI for direct terminal writes.
     """
-    from .field import _smooth_noise, mottle
+    from .field import _smooth_noise
+    from .patterns import field_for
 
     seed = seed_for(session_id)
     # THE FIELD IS CUTTLEFISH SKIN, not a nebula. Adam, 2026-09-09: "dont focus
@@ -227,7 +228,7 @@ def mantle_rows(
     # below (the actual "multi colour vibrant" request), the state recolouring,
     # and the performance work — the 32-level quantisation stays because it is
     # what keeps the render at ~80ms instead of ~200.
-    field = mottle(width, height, seed=seed)
+    pattern, field = field_for(session_id, width, height)
     for yy in range(height):
         for xx in range(width):
             field.set(xx, yy, round(field.get(xx, yy) * 32.0) / 32.0)
