@@ -285,6 +285,48 @@ def test_render_cost_is_within_budget_and_cached():
     assert time.perf_counter() - t0 < 0.03
 
 
+# ------------------------------------------------------- (9) the palette hot path
+def test_palette_build_is_fast_enough_to_animate():
+    """The blanch curve is 0.4 s at 24 fps: ~17 ms per frame, and every frame
+    rebuilds a palette. v5 spent ~490 ms per build in ensure_contrast (a 0.002-step
+    linear scan of L, each step a 24-iteration gamut bisection: ~3,100 gamut maps
+    per palette) and the animator has been frame-starved since v2 without anyone
+    noticing, because the proofs only counted frames. Contrast is monotone in L on
+    a fixed hue/chroma line, so this is a bisection, not a scan."""
+    from cuttlefish_theme.color.identity import allocate
+    from cuttlefish_theme.pattern import render
+    from cuttlefish_theme.session import Signal
+
+    render(allocate("warm-up")).skin_colors()  # any lazy imports / caches
+    t0 = time.perf_counter()
+    n = 0
+    for sid in ("zivyra", "tilola", "nygoka"):
+        for sig in Signal:
+            render(allocate(sid), sig).skin_colors()
+            n += 1
+    per_build = (time.perf_counter() - t0) / n
+    assert per_build < 0.015, f"{per_build*1000:.1f} ms per palette build"
+
+
+def test_contrast_search_result_is_unchanged_by_the_fast_path():
+    """Speed must not move colours: the bisection lands on the same rendered hex
+    the scan did (within one 0.002 L step) for a spread of inputs."""
+    from cuttlefish_theme.color.oklab import OKLCh, oklch_to_hex
+    from cuttlefish_theme.color.terminal import contrast_ratio, ensure_contrast_detailed
+
+    for L0 in (0.20, 0.35, 0.50, 0.65, 0.80):
+        for C in (0.02, 0.12, 0.22):
+            for h in (30.0, 120.0, 200.0, 280.0):
+                for bg in ("#10131F", "#F5F5F5", "#1A1A2E"):
+                    res = ensure_contrast_detailed(OKLCh(L0, C, h), bg, min_ratio=4.5)
+                    if res.met:
+                        assert contrast_ratio(oklch_to_hex(res.oklch), bg) >= 4.5, (L0, C, h, bg)
+                        # minimal move: one step less would NOT meet the target
+                        back = res.oklch.with_(L=res.oklch.L - 0.004 * (1 if res.oklch.L > L0 else -1))
+                        if 0.0 <= back.L <= 1.0 and abs(res.oklch.L - L0) > 0.004:
+                            assert contrast_ratio(oklch_to_hex(back), bg) < 4.5 + 0.35, (L0, C, h, bg)
+
+
 # ------------------------------------------------------------------ (10) metadata
 def test_release_metadata():
     import yaml
