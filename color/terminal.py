@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 from .oklab import (
     OKLCh,
@@ -277,18 +278,25 @@ class ContrastResult:
 
 # Search resolution for ensure_contrast. 0.002 in L is ~a fifth of a
 # just-noticeable difference, so a finer grid buys nothing perceptually while
-# doubling the cost. The grid is a scan rather than a bisection because
-# contrast as a function of L is monotone in practice but NOT provably so
-# (gamut mapping may trim chroma near the extremes, nudging luminance), and a
-# scan only ever returns a candidate we have actually verified.
+# doubling the cost. Contrast is monotone in L along a fixed (C, h) line, so
+# the first satisfying grid point can be found with bisection. Every returned
+# point is still verified against its rendered 8-bit hex by _ratio_at.
 _L_STEP = 0.002
+
+
+@lru_cache(maxsize=4096)
+def _oklch_to_hex_cached(L: float, C: float, h: float) -> str:
+    """Render a rounded OKLCh point once; gamut mapping dominates this path."""
+    return oklch_to_hex(OKLCh(L, C, h))
 
 
 def _ratio_at(c: OKLCh, bg_hex: str) -> float:
     # Measured on the 8-bit hex that would actually be emitted, so the found
     # L meets the target in *rendered* pixels, not just in float space where
-    # rounding could shave the ratio just below the threshold.
-    return contrast_ratio(oklch_to_hex(c), bg_hex)
+    # rounding could shave the ratio just below the threshold. The rounded
+    # cache key is below one 8-bit output step and preserves rendered output.
+    rendered = _oklch_to_hex_cached(round(c.L, 3), round(c.C, 3), round(c.h, 3))
+    return contrast_ratio(rendered, bg_hex)
 
 
 def ensure_contrast_detailed(fg: OKLCh, bg_hex: str, *,
@@ -302,25 +310,38 @@ def ensure_contrast_detailed(fg: OKLCh, bg_hex: str, *,
     is presentation — the one axis that changes contrast monotonically
     without touching identity.
 
-    Strategy: scan L upward and downward from the input L in small steps and
-    take the first candidate in each direction that meets the target (each
-    candidate is verified against the quantized hex, see ``_ratio_at``), then
-    keep whichever direction needed the smaller |dL|. If the input already
-    meets the target, |dL| = 0. If neither direction can reach it (possible
-    against mid-luminance backgrounds with high targets), the best achievable
-    endpoint is returned with ``met=False`` in the result — never a lie.
+    Strategy: bisect L upward and downward from the input L to find the first
+    satisfying point on the same 0.002-resolution grid. The candidate is
+    verified against the rendered hex (see ``_ratio_at``), then keep whichever
+    direction needed the smaller |dL|. If the input already meets the target,
+    |dL| = 0. If neither direction can reach it (possible against
+    mid-luminance backgrounds with high targets), the best achievable endpoint
+    is returned with ``met=False`` in the result — never a lie.
     """
     def scan(l_from: float, l_to: float) -> tuple[float, float] | None:
-        """First L strictly between l_from and l_to (stepping toward l_to)
-        whose rendered colour meets the target, as (L, achieved_ratio)."""
+        """First satisfying grid point toward *l_to*, found by bisection."""
         step = _L_STEP if l_to > l_from else -_L_STEP
         steps = int(round((l_to - l_from) / step))
-        for i in range(1, steps + 1):
-            L = l_from + step * i
-            ratio = _ratio_at(fg.with_(L=L), bg_hex)
-            if ratio >= min_ratio:
-                return L, ratio
-        return None
+        endpoint = l_from + step * steps
+        if _ratio_at(fg.with_(L=endpoint), bg_hex) < min_ratio:
+            return None
+
+        # Find the first satisfying integer grid offset. The endpoint is known
+        # to satisfy, while offset zero is the already-tested failing input.
+        lo, hi = 1, steps
+        while lo < hi:
+            mid = (lo + hi) // 2
+            L = l_from + step * mid
+            if _ratio_at(fg.with_(L=L), bg_hex) >= min_ratio:
+                hi = mid
+            else:
+                lo = mid + 1
+        L = l_from + step * lo
+        # Keep the measured-on-hex property explicit at the returned point.
+        ratio = _ratio_at(fg.with_(L=L), bg_hex)
+        if ratio < min_ratio:
+            return None
+        return L, ratio
 
     start_ratio = _ratio_at(fg, bg_hex)
     if start_ratio >= min_ratio:

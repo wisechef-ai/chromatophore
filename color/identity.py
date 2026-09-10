@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable, Sequence
 
 from .oklab import (
@@ -145,7 +146,8 @@ def _seed_stream(session_id: str) -> tuple[int, ...]:
     return tuple(int.from_bytes(digest[i:i + 8], "big") for i in range(0, 32, 8))
 
 
-def _candidates(session_id: str, count: int) -> list[OKLCh]:
+@lru_cache(maxsize=4096)
+def _candidates(session_id: str, count: int) -> tuple[OKLCh, ...]:
     """Deterministic, well-spread candidate colours for this session id.
 
     The id fixes a starting point in the (hue, L, C) volume; successive candidates
@@ -181,7 +183,26 @@ def _candidates(session_id: str, count: int) -> list[OKLCh]:
         # it came from.
         if cand.C >= _C_MIN * 0.95 and in_srgb_gamut(cand):
             out.append(cand)
-    return out
+    return tuple(out)
+
+
+@lru_cache(maxsize=4096)
+def _allocate_alone_cached(
+    session_id: str,
+    min_distance: float,
+    candidate_count: int,
+) -> IdentityColor:
+    cands = _candidates(session_id, 1)
+    if not cands:  # pragma: no cover - bands are validated by allocation tests
+        raise RuntimeError("no in-gamut candidates; identity colour bands are invalid")
+    best = cands[0]
+    return IdentityColor(
+        session_id=session_id,
+        oklch=best,
+        hex=oklch_to_hex(best),
+        separation=float("inf"),
+        crowded=False,
+    )
 
 
 def allocate(
@@ -204,14 +225,15 @@ def allocate(
         raise ValueError("session_id must be a non-empty string")
 
     others: list[OKLCh] = [c if isinstance(c, OKLCh) else hex_to_oklch(c) for c in live]
+    if not others:
+        return _allocate_alone_cached(session_id, min_distance, candidate_count)
+
     cands = _candidates(session_id, candidate_count)
     if not cands:  # pragma: no cover - only reachable if the bands are misconfigured
         raise RuntimeError("no in-gamut candidates; identity colour bands are invalid")
 
-    if not others:
-        # Alone: the first candidate is already deterministic and well-placed.
-        best, sep = cands[0], float("inf")
-    else:
+    best, sep = cands[0], float("inf")
+    if others:
         # Farthest-point selection: maximise the distance to the NEAREST neighbour.
         scored = [(min(delta_e_ok(c, o) for o in others), c) for c in cands]
         sep, best = max(scored, key=lambda t: (t[0], -t[1].h))

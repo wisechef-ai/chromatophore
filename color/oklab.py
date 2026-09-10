@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Iterable
 
 __all__ = [
@@ -146,9 +147,14 @@ def rgb_to_hex(r: float, g: float, b: float) -> str:
     return f"#{ch(r):02X}{ch(g):02X}{ch(b):02X}"
 
 
+@lru_cache(maxsize=8192)
+def _oklch_to_hex_cached(L: float, C: float, h: float) -> str:
+    return rgb_to_hex(*oklab_to_srgb(*oklch_to_oklab(gamut_map(OKLCh(L, C, h)))))
+
+
 def oklch_to_hex(c: OKLCh) -> str:
-    """Gamut-map then encode. Always returns a displayable sRGB colour."""
-    return rgb_to_hex(*oklab_to_srgb(*oklch_to_oklab(gamut_map(c))))
+    """Gamut-map then encode, cached below one 8-bit output step."""
+    return _oklch_to_hex_cached(round(c.L, 3), round(c.C, 3), round(c.h, 3))
 
 
 def hex_to_oklch(value: str) -> OKLCh:
@@ -165,7 +171,7 @@ def in_srgb_gamut(c: OKLCh) -> bool:
     return all(-_GAMUT_EPS <= v <= 1.0 + _GAMUT_EPS for v in (r, g, b))
 
 
-def gamut_map(c: OKLCh, *, iterations: int = 24) -> OKLCh:
+def _gamut_map_uncached(c: OKLCh, *, iterations: int = 24) -> OKLCh:
     """Bring *c* into sRGB by reducing chroma, holding L and h fixed.
 
     Holding hue is what makes this safe for identity: a naive per-channel clamp
@@ -189,6 +195,16 @@ def gamut_map(c: OKLCh, *, iterations: int = 24) -> OKLCh:
         else:
             hi = mid
     return OKLCh(L, lo, c.h)
+
+
+@lru_cache(maxsize=8192)
+def _gamut_map_cached(L: float, C: float, h: float, iterations: int) -> OKLCh:
+    return _gamut_map_uncached(OKLCh(L, C, h), iterations=iterations)
+
+
+def gamut_map(c: OKLCh, *, iterations: int = 24) -> OKLCh:
+    """Cached gamut mapping keyed below one 8-bit output step."""
+    return _gamut_map_cached(round(c.L, 3), round(c.C, 3), round(c.h, 3), iterations)
 
 
 # --- Distance ---------------------------------------------------------------
