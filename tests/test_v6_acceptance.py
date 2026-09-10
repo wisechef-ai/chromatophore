@@ -7,15 +7,11 @@ requirement from PLAN-v6.md, not a snapshot of whatever the code happens to do.
 
 from __future__ import annotations
 
-import math
 import re
 import statistics
-import subprocess
-import sys
 import time
+from itertools import pairwise
 from pathlib import Path
-
-import pytest
 
 from cuttlefish_theme.color.oklab import hex_to_oklch
 from cuttlefish_theme.color.terminal import contrast_ratio
@@ -43,7 +39,7 @@ def _grid(field):
 
 
 def test_patterns_six_classes_are_all_reachable_and_stable():
-    from cuttlefish_theme.patterns import PATTERN_CLASSES, pattern_for, field_for
+    from cuttlefish_theme.patterns import PATTERN_CLASSES, field_for, pattern_for
 
     assert len(PATTERN_CLASSES) >= 6
     names = {pattern_for(sid).name for sid in _IDS}
@@ -178,7 +174,7 @@ def test_separator_is_a_row_of_chromatophores_of_terminal_width():
     assert len(set(_HEX.findall(row))) >= 8
     # not a smooth ramp: adjacent cells must change colour often
     cells = _HEX.findall(row)
-    changes = sum(a != b for a, b in zip(cells, cells[1:]))
+    changes = sum(a != b for a, b in pairwise(cells))
     assert changes >= 30, changes
     assert separator("zivyra", "resting", 100) == row
     assert separator("zivyra", "needs-me", 100) != row
@@ -278,10 +274,10 @@ def test_every_text_colour_reads_on_its_surface():
 
 # ------------------------------------------------------------------- (8) performance
 def test_render_cost_is_within_budget_and_cached():
-    from cuttlefish_theme.color.identity import allocate
-    from cuttlefish_theme.mantle import mantle_rows
     from cuttlefish_theme.banner import banner_logo
+    from cuttlefish_theme.color.identity import allocate
     from cuttlefish_theme.linework import separator
+    from cuttlefish_theme.mantle import mantle_rows
     from cuttlefish_theme.pattern import render
 
     p = render(allocate("perf-session"))
