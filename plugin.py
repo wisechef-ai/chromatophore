@@ -38,6 +38,33 @@ from .termbg import reset_terminal_background, set_terminal_background
 logger = logging.getLogger(__name__)
 
 
+PLUGIN_NAME = "cuttlefish-theme"
+
+# Module state: one session per process, so a single slot is honest here rather
+# than a registry that implies multi-tenancy we do not have in the classic CLI.
+_state: dict[str, Any] = {
+    "session_id": None,
+    "animator": None,
+    "previous_skin": None,
+    "identity": None,
+}
+
+# Defaults are the answers Adam gave on 2026-09-09. Every one is overridable via
+# `plugins.entries.cuttlefish-theme.settings.<key>` — a theme that cannot be turned
+# down is a theme people uninstall.
+_DEFAULTS = {
+    "animate": True,          # animate transitions (False = v1 snap behaviour)
+    "tint_background": True,  # per-session near-black mantle
+    "fps": DEFAULT_FPS,
+    "watch_interval": WATCH_INTERVAL,
+    # Paint the TERMINAL's own background via OSC 11. The classic CLI cannot set
+    # an app background (its `input-area` style is deliberately empty so typed
+    # text keeps your terminal's colours), so this is the only honest way to make
+    # the window itself carry the session's near-black.
+    "terminal_background": True,
+}
+
+
 def _settings(ctx=None) -> dict[str, Any]:
     """Resolve settings, falling back to defaults for anything unset or malformed.
 
