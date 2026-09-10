@@ -122,15 +122,13 @@ def _sheen_dim(identity: OKLCh) -> OKLCh:
 
 
 def _ground(identity: OKLCh) -> OKLCh:
-    """The mantle: this session's near-black.
+    """Return the single uniform navy ground shared by every session.
 
-    L 0.16 is dark enough to read as black next to any terminal's own background,
-    while C 0.022 is above the ~0.01 threshold at which a hue becomes detectable on
-    a large field — so two sessions side by side are visibly different blacks, and
-    neither looks like a coloured window. Hue is inherited from the identity, which
-    is what ties the ground to the chrome and the pixels.
+    Identity belongs in the chromatophore cells and chrome, not in a large flat
+    surface: one ground keeps the terminal calm and makes the small active cells
+    carry the session distinction.
     """
-    return identity.with_(L=0.155, C=min(0.026, max(0.018, identity.C * 0.12)))
+    return OKLCh(L=0.155, C=0.008, h=270.0)
 
 
 def render(

@@ -190,6 +190,7 @@ def _cached_composite(expansion: float, pigment: OKLCh, sheen: OKLCh,
                              _oklch_key(base))
 
 
+@lru_cache(maxsize=512)
 def mantle_rows(
     session_id: str,
     identity_hex: str,

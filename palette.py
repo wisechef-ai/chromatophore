@@ -129,6 +129,13 @@ def dominant_pigments(session_id: str) -> tuple[str, ...]:
     return tuple(names[(start + i * 2) % (len(names) - 1)] for i in range(count))
 
 
+def pigment_hex(name: str) -> str:
+    """Return a vivid sRGB hex for a named chromatophore pigment."""
+    if name == "pearl-white":
+        return "#F4F1E8"
+    return oklch_to_hex(OKLCh(0.70, 0.50, PIGMENTS[name]))
+
+
 # Fixed semantic anchors. Deliberately differing in LIGHTNESS as well as hue:
 # under deuteranopia red and green converge in hue, so lightness is what keeps
 # them apart (error L 0.58 vs good L 0.74). glm-5.3 raised this; the CVD check
@@ -319,10 +326,10 @@ def build_palette(
         # banner / text family
         "banner_text": oklch_to_hex(body),
         "banner_dim": oklch_to_hex(dim),
-        "banner_title": accent_hex,
-        "banner_accent": accent_hex,
-        "ui_accent": accent_hex,
-        "ui_primary": oklch_to_hex(body),
+        "banner_title": _on(ground_hex, accent, 4.5),
+        "banner_accent": _on(ground_hex, accent, 4.5),
+        "ui_accent": _on(ground_hex, accent, 4.5),
+        "ui_primary": _on(ground_hex, body, 4.5),
         "input_rule": oklch_to_hex(rule),
         "prompt": accent_hex,
         "ui_label": _on(bar_hex, OKLCh(accent.L - 0.04, accent.C * 0.85, sheen.h), 4.5),
@@ -336,15 +343,15 @@ def build_palette(
         # rule on screen after everything else was themed.
         "banner_border": oklch_to_hex(border),
         "session_border": oklch_to_hex(border),
-        "session_label": accent_hex,
+        "session_label": _on(ground_hex, accent, 4.5),
         "selection_bg": menu_sel_hex,
         "shell_dollar": accent_hex,
 
         # semantics: FIXED. Never derived from identity, so red stays error
         # whatever colour this session happens to be.
-        "ui_error": oklch_to_hex(SEMANTIC["error"]),
-        "ui_warn": oklch_to_hex(SEMANTIC["warn"]),
-        "ui_ok": oklch_to_hex(SEMANTIC["good"]),
+        "ui_error": _on(ground_hex, SEMANTIC["error"], 4.5),
+        "ui_warn": _on(ground_hex, SEMANTIC["warn"], 4.5),
+        "ui_ok": _on(ground_hex, SEMANTIC["good"], 4.5),
     }
 
     if tint_background:

@@ -212,43 +212,32 @@ def test_stream_end_hook_prints_through_rich_only_on_a_tty(monkeypatch, capsys):
     assert printed == []  # only the classic CLI has a screen
 
 
-# ----------------------------------------------------------------- (6) chrome tier B
-def test_chrome_renderer_contract_and_tier_a_fallback():
-    from cuttlefish_theme import plugin
-    from cuttlefish_theme.chrome import chrome_renderer
+# ------------------------------------------------ (6) tier B = skin data, not a hook
+def test_skin_file_carries_input_rule_art_and_older_cores_ignore_it(tmp_path, monkeypatch):
+    """Tier B is a whole-string skin field (`input_rule_art`, like banner_hero):
+    a core that knows it draws the chromatophore rule; a core that does not
+    simply never reads the key. No capability probe, no hook, nothing to
+    register."""
+    import yaml
+    from cuttlefish_theme.color.identity import allocate
+    from cuttlefish_theme.pattern import render
+    from cuttlefish_theme.skinio import write_skin
+    from rich.text import Text
 
-    for surface in ("input_rule_top", "input_rule_bot", "status_bar_bg"):
-        frags = chrome_renderer(surface, 80, {"session_id": "zivyra", "skin": "cuttlefish"})
-        assert frags is not None
-        assert sum(len(t) for _s, t in frags) == 80
-        styles = {s for s, _t in frags}
-        assert len(styles) >= 8
-        assert all(re.search(r"bg:#[0-9A-Fa-f]{6}", s) for s in styles)
-    assert chrome_renderer("input_rule_top", 80, {"session_id": None}) is None
-    assert chrome_renderer("unknown", 80, {"session_id": "x"}) is None
-
-    class TierACtx:
-        def __init__(self):
-            self.hooks = []
-        def register_hook(self, name, fn):
-            self.hooks.append(name)
-        def register_cli_command(self, *a, **k):
-            pass
-        def get_config(self, k, d=None):
-            return d
-
-    class TierBCtx(TierACtx):
-        def __init__(self):
-            super().__init__()
-            self.renderer = None
-        def register_chrome_renderer(self, fn):
-            self.renderer = fn
-
-    a, b = TierACtx(), TierBCtx()
-    plugin.register(a)
-    plugin.register(b)
-    assert b.renderer is chrome_renderer
-    assert set(a.hooks) == set(b.hooks)  # tier A loses nothing, gains nothing
+    path = write_skin(render(allocate("zivyra")), hermes_home=tmp_path, name="cuttlefish")
+    data = yaml.safe_load(path.read_text())
+    art = data["input_rule_art"]
+    assert isinstance(art, str) and "\n" not in art
+    txt = Text.from_markup(art)
+    assert txt.cell_len >= 200                      # the core tiles/clips to width
+    assert len(set(_HEX.findall(art))) >= 8         # rows of chromatophores, not a line
+    assert data["banner_hero"] and data["banner_logo"]  # the two precedents still present
+    # the installed core (any version) loads the file without choking on the key
+    from hermes_cli.skin_engine import load_skin  # real engine, read-only
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    skin = load_skin("cuttlefish")
+    assert skin.banner_hero
+    assert getattr(skin, "input_rule_art", "") in ("", art)
 
 
 # ---------------------------------------------------------------------- (7) contrast

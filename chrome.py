@@ -6,6 +6,7 @@ Hermes core: it only returns the documented style/text fragment pairs.
 from __future__ import annotations
 from functools import lru_cache
 from .patterns import field_for
+from .palette import pigment_hex, dominant_pigments
 from .pattern import render
 from .color.identity import allocate
 
@@ -15,17 +16,16 @@ def chrome_fragments(session_id: str, signal, width: int) -> tuple[tuple[str, st
     identity = allocate(session_id)
     from .session import Signal
     if isinstance(signal, str):
-        signal = Signal(signal) if signal in {s.value for s in Signal} else Signal.RESTING
-    palette = render(identity, signal)
-    colors = palette.skin_colors()
-    field = field_for(session_id, max(1, width), 2)[1]
-    bg = colors.get('status_bar_bg', palette.ground_hex)
-    # Quantised expansion yields visible cells without a smooth gradient.
+        aliases = {'needs-me': Signal.NEEDS_ME, 'resting': Signal.RESTING, 'fault': Signal.FAULT}
+        signal = aliases.get(signal, Signal.RESTING)
+    # Keep separators fast: chrome is a small deterministic raster, not the mantle.
+    from .palette import PIGMENTS
+    pigments = [pigment_hex(n) for n in PIGMENTS]
+    bg = '#1C1B43' if signal is Signal.RESTING else ('#3B2510' if signal is Signal.NEEDS_ME else '#3B1515')
     out = []
     for x in range(width):
-        v = field.get(x, 0)
-        fg = colors.get('ui_accent', palette.identity_hex) if v > .42 else colors.get('banner_dim', palette.sheen_dim_hex)
-        out.append((f'bg:{bg} {fg}', '━' if v > .55 else '─'))
+        fg = pigments[(x + (0 if signal is Signal.RESTING else 1)) % len(pigments)]
+        out.append((f'bg:{bg} {fg}', '━' if x % 3 == 0 else '─'))
     return tuple(out)
 
 def chrome_renderer(surface: str, width: int, ctx: dict):

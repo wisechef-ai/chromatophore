@@ -38,6 +38,12 @@ from .skinio import (remove_skin, stable_skin_name, sweep_orphans,
 
 logger = logging.getLogger(__name__)
 
+
+def _console():
+    """Create the current Rich console lazily so tests and hosts can replace it."""
+    from rich.console import Console
+    return Console()
+
 PLUGIN_NAME = "cuttlefish-theme"
 
 # Module state: one session per process, so a single slot is honest here rather
@@ -181,10 +187,12 @@ def on_session_start(session_id: str = "", _ctx=None, **_kw) -> None:
 
 
 def on_stream_end(session_id: str = "", console=None, signal=Signal.RESTING,
+                  surface: str = "cli", finished: bool = False, error=None,
                   **_kw) -> None:
-    """Tier-A separator after assistant output, only on interactive colour consoles."""
-    if not session_id or console is None:
+    """Print a Rich separator only after finished interactive CLI streams."""
+    if not session_id or surface != "cli" or not finished or error is not None:
         return
+    console = console or _console()
     if getattr(console, "no_color", False) or not getattr(console, "is_terminal", False):
         return
     try:

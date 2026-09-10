@@ -18,12 +18,12 @@ def _octaves(x: float, y: float, seed: int, scales=(3.0, 7.0, 13.0)) -> float:
 class UniformFineMottle(BodyPattern):
     def __init__(self): super().__init__('uniform-fine-mottle')
     def field(self, width=30, height=30, *, seed=None, t=0.0):
-        return mottle(width, height, seed=seed or 0, scale=2.1, density=.20, grain=.65, contrast=1.3)
+        return mottle(width, height, seed=seed or 0, scale=1.5, density=.28, grain=.35, contrast=2.0)
 
 class CoarseMottle(BodyPattern):
     def __init__(self): super().__init__('coarse-mottle')
     def field(self, width=30, height=30, *, seed=None, t=0.0):
-        return mottle(width, height, seed=seed or 0, scale=7.5, density=.24, grain=.35, contrast=1.25)
+        return mottle(width, height, seed=seed or 0, scale=5.0, density=.48, grain=.20, contrast=2.0)
 
 class TransverseStripes(BodyPattern):
     def __init__(self): super().__init__('transverse-stripes-zebra')
@@ -39,7 +39,7 @@ class TransverseStripes(BodyPattern):
 class PassingCloudBands(BodyPattern):
     def __init__(self): super().__init__('passing-cloud-bands')
     def field(self, width=30, height=30, *, seed=None, t=0.0):
-        base = mottle(width, height, seed=seed or 0, scale=4.5, density=.18, grain=.5)
+        base = mottle(width, height, seed=seed or 0, scale=4.0, density=.48, grain=.15, contrast=2.5)
         return passing_cloud(base, t, seed=seed or 0, direction=(0, 1), width_cells=5.0, depth=.9)
 
 class DisruptivePatches(BodyPattern):

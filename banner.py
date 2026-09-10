@@ -28,6 +28,9 @@ def banner_logo(identity_hex: str, session_id: str = '') -> str:
                 out.append(ch)
             else:
                 color=colors[(seed + x*13 + y*7) % len(colors)]
+                if (x + y) == 0:
+                    # Keep same pigment layout while making session re-inking visible.
+                    color = oklch_to_hex(OKLCh(.64, min(.20, max(.12, identity.C)), (PIGMENTS[names[0]] + seed % 29) % 360))
                 out.append(f'[{color}]{ch}[/]')
         lines.append(''.join(out))
     return '\n'.join(lines)
