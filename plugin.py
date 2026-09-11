@@ -28,6 +28,7 @@ import logging
 from typing import Any
 
 from .bootstrap import ensure_configured
+from .chrome import chrome_renderer
 from .color.identity import allocate
 from .live import DEFAULT_FPS, WATCH_INTERVAL, Animator, apply_palette_now
 from .pattern import render
@@ -264,6 +265,11 @@ def register(ctx) -> None:
         )
     except Exception:
         logger.debug("cuttlefish: CLI registration unavailable", exc_info=True)
+
+    try:
+        ctx.register_chrome_renderer(chrome_renderer)
+    except Exception:
+        logger.debug("cuttlefish: chrome renderer unavailable", exc_info=True)
 
     for hook, fn in (("on_session_start", on_session_start),
                      ("on_session_end", on_session_end)):
