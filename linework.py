@@ -46,8 +46,13 @@ def _signal_time(signal: str) -> float:
 
 
 @lru_cache(maxsize=512)
-def cells(session_id: str, signal: str, width: int) -> tuple[tuple[str, str, str], ...]:
-    """(fg, bg, glyph) per column — the one source every formatter renders from."""
+def cells(session_id: str, signal: str, width: int,
+          row_key: int | None = None) -> tuple[tuple[str, str, str], ...]:
+    """(fg, bg, glyph) per column — the one source every formatter renders from.
+
+    ``row_key`` selects a stable body-field row for transcript painting.  The
+    default keeps the original one-row projection used by the input rule.
+    """
     width = max(0, int(width))
     if not width:
         return ()
@@ -57,8 +62,12 @@ def cells(session_id: str, signal: str, width: int) -> tuple[tuple[str, str, str
     # threshold) gives every seed the same budget, including degenerate fields.
     # Segments (not a global top-N) stop the 2D field's clustering from leaving
     # voids — globally it lit 3 clumps around a 33-cell dead gap.
-    _, field = field_for(session_id, width, 3, t=_signal_time(signal))
-    values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
+    _, field = field_for(session_id, width, 64 if row_key is not None else 3,
+                         t=_signal_time(signal))
+    if row_key is None:
+        values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
+    else:
+        values = [field.get(x, int(row_key) % field.height) for x in range(width)]
     hottest = lambda columns, n: sorted(columns, key=lambda x: (values[x], x), reverse=True)[:n]
     segment = 10
     vivid = {x for start in range(0, width, segment)
