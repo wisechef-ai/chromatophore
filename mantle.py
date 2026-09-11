@@ -49,12 +49,13 @@ which is what makes it a state channel and not decoration.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 
 from .color.oklab import OKLCh, hex_to_oklch
 from .seed import seed_for
 
-__all__ = ["mantle_rows", "pigment_set", "MANTLE_WIDTH", "MANTLE_HEIGHT"]
+__all__ = ["mantle_rows", "pigment_set", "chromatophore_set", "Chromatophore", "MANTLE_WIDTH", "MANTLE_HEIGHT"]
 
 # MEASURED against the art it replaces: `banner.py`'s HERMES_CADUCEUS is 30
 # columns wide and 15 lines tall, and it is the LEFT COLUMN of a two-column
@@ -95,10 +96,55 @@ _IRIDOPHORE_INDEX = 3
 _ACUTE_PULL = 0.72
 
 
-def pigment_set(
-    identity_hex: str,
-    acute_hex: str | None = None,
-) -> tuple[OKLCh, ...]:
+@dataclass(frozen=True)
+class Chromatophore:
+    """One layered skin class; ``family`` is the readable state channel."""
+    name: str
+    family: str
+    oklch: OKLCh
+    weight: float
+
+
+# Acute classes are deliberately shared across sessions: dominance is semantic,
+# while only the resting classes carry identity.
+_ACUTE_SETS = {
+    "needs_me": (OKLCh(.40, .18, 68), OKLCh(.46, .17, 86), OKLCh(.68, .09, 205), OKLCh(.90, .03, 85)),
+    "fault": (OKLCh(.38, .20, 20), OKLCh(.46, .19, 34), OKLCh(.60, .08, 220), OKLCh(.90, .03, 20)),
+}
+
+
+def chromatophore_set(identity_or_palette, signal=None) -> tuple[Chromatophore, ...]:
+    """Resolve a session's two pigments plus structural complements.
+
+    Resting pigments are dark and identity-derived. Acute sets are fixed so an
+    operator can recognise NEEDS_ME/FAULT across six terminals at once.
+    """
+    identity = (identity_or_palette.identity_hex if hasattr(identity_or_palette, "identity_hex")
+                else identity_or_palette.hex if hasattr(identity_or_palette, "hex")
+                else identity_or_palette)
+    base = hex_to_oklch(identity)
+    key = getattr(signal, "value", signal)
+    if key in _ACUTE_SETS:
+        vals = _ACUTE_SETS[key]
+        return (Chromatophore("pigment-a", "amber" if key == "needs_me" else "red", vals[0], .40),
+                Chromatophore("pigment-b", "amber" if key == "needs_me" else "red", vals[1], .40),
+                Chromatophore("iridophore", "cool", vals[2], .14),
+                Chromatophore("leucophore", "leucophore", vals[3], .06))
+    a = OKLCh(.30, min(.22, max(.12, base.C * 1.2)), (base.h - 55) % 360)
+    b = OKLCh(.30, min(.22, max(.12, base.C * 1.2)), (base.h + 125) % 360)
+    return (Chromatophore("pigment-a", "identity-a", a, .40),
+            Chromatophore("pigment-b", "identity-b", b, .40),
+            Chromatophore("iridophore", "cool", OKLCh(.55, .10, (base.h + 180) % 360), .14),
+            Chromatophore("leucophore", "leucophore", OKLCh(.90, .03, base.h), .06))
+
+
+def pigment_set(identity_hex: str, acute_hex: str | None = None) -> tuple[OKLCh, ...]:
+    """Backward-compatible OKLCh view of the historic four classes."""
+    return _legacy_pigment_set(identity_hex, acute_hex)
+
+
+def _legacy_pigment_set(identity_hex: str, acute_hex: str | None = None) -> tuple[OKLCh, ...]:
+    """Historic palette retained for callers of the v9 API."""
     """The pigment classes this session's chromatophores are drawn from.
 
     Three warm-ish classes spread around the identity hue, mirroring the animal's
@@ -233,7 +279,9 @@ def mantle_rows(
     for yy in range(height):
         for xx in range(width):
             field.set(xx, yy, round(field.get(xx, yy) * 32.0) / 32.0)
-    pigments = pigment_set(identity_hex, acute_hex)
+    pigments = tuple(c.oklch for c in chromatophore_set(
+        identity_hex, "fault" if acute_hex and hex_to_oklch(acute_hex).h < 50
+        else ("needs_me" if acute_hex else None)))
     sheen = hex_to_oklch(sheen_hex)
     base = hex_to_oklch(ground_hex)
     if acute_hex:
@@ -269,9 +317,13 @@ def mantle_rows(
     cutoffs = [c / total for c in cutoffs]
 
     def pigment_at(x: int, y: int) -> OKLCh:
+        # Expansion chooses the class that is physically open at this cell;
+        # coarse noise only clusters neighbouring cells of that class.
+        expansion = field.get(x, y)
         n = _smooth_noise(x / 7.0, y / 7.0, seed ^ 0x9E37)
+        selector = (n * 0.35 + expansion * 0.65) % 1.0
         for index, cut in enumerate(cutoffs):
-            if n <= cut:
+            if selector <= cut:
                 return pigments[index]
         return pigments[-1]
 

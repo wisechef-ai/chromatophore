@@ -37,6 +37,15 @@ def _mantle_palette(session_id: str) -> tuple[str, str]:
     return render(identity).ground_hex, _index_to_hex(quantize_cube_256(oklch_to_hex(wanted)))
 
 
+@lru_cache(maxsize=32)
+def _mantle_pigment_set(session_id: str) -> tuple[str, ...]:
+    """Quantised dark chromatophore classes for the transcript background."""
+    from .mantle import chromatophore_set
+    identity = allocate(session_id)
+    return tuple(_index_to_hex(quantize_cube_256(oklch_to_hex(c.oklch)))
+                 for c in chromatophore_set(identity)[:2])
+
+
 @lru_cache(maxsize=512)
 def _mantle_row(session_id: str, width: int, row_key: int) -> tuple[tuple[str, str], ...]:
     """One row of the transcript mantle, as prompt_toolkit fragments.
@@ -44,9 +53,11 @@ def _mantle_row(session_id: str, width: int, row_key: int) -> tuple[tuple[str, s
     Cached whole: this is called once per printed line, and rebuilding an
     80-element list of f-strings per line is most of the cost at that rate.
     """
-    ground, pigment = _mantle_palette(session_id)
-    return tuple((f"bg:{pigment if fg != ground else ground}", " ")
-                 for fg, _bg, _glyph in cells(session_id, Signal.RESTING.value, width, row_key))
+    ground, _pigment = _mantle_palette(session_id)
+    pigments = _mantle_pigment_set(session_id)
+    return tuple((f"bg:{ground if fg == ground else pigments[(x + row_key) % len(pigments)]}", " ")
+                 for x, (fg, _bg, _glyph) in enumerate(
+                     cells(session_id, Signal.RESTING.value, width, row_key)))
 
 
 def chrome_renderer(surface: str, width: int, ctx: dict[str, Any]) -> list[tuple[str, str]] | None:
