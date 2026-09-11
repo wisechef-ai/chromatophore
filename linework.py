@@ -40,10 +40,11 @@ def _signal_time(signal: str) -> float:
 
 
 @lru_cache(maxsize=512)
-def separator_markup(session_id: str, signal: str, width: int) -> str:
+def cells(session_id: str, signal: str, width: int) -> tuple[tuple[str, str, str], ...]:
+    """(fg, bg, glyph) per column — the one source every formatter renders from."""
     width = max(0, int(width))
     if not width:
-        return ""
+        return ()
 
     # A one-cell-high terminal rule is a projection of a small body patch. Take
     # the local maximum, then select by rank rather than an absolute threshold:
@@ -57,22 +58,25 @@ def separator_markup(session_id: str, signal: str, width: int) -> str:
     ground = render(allocate(session_id)).ground_hex
     variants = (_acute_variants(signal) if signal in ("fault", "error", "needs-me", "needs_me")
                 else _identity_variants(session_id))
-    parts: list[str] = []
     ranked_vivid = sorted(vivid, key=lambda x: (values[x], x), reverse=True)
+    out: list[tuple[str, str, str]] = []
     for x, value in enumerate(values):
         if x not in vivid:
-            colour = ground
-            glyph = "─"
+            out.append((ground, ground, "─"))
         else:
             rank = ranked_vivid.index(x)
             colour = variants[min(len(variants) - 1, int((rank + 1) * len(variants) / vivid_count))]
-            glyph = "━" if value >= 0.70 else "─"
-        parts.append(f"[{colour} on {ground}]{glyph}[/]")
-    return "".join(parts)
+            out.append((colour, ground, "━" if value >= 0.70 else "─"))
+    return tuple(out)
+
+
+def separator_markup(session_id: str, signal: str, width: int) -> str:
+    return "".join(f"[{fg} on {bg}]{glyph}[/]"
+                   for fg, bg, glyph in cells(session_id, signal, width))
 
 
 def separator(session_id: str, signal: str, width: int) -> str:
     return separator_markup(session_id, str(signal), int(width))
 
 
-__all__ = ["separator", "separator_markup"]
+__all__ = ["cells", "separator", "separator_markup"]

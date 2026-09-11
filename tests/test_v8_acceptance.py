@@ -2,10 +2,11 @@
 from __future__ import annotations
 
 import re
+
+import pytest
 from collections import Counter
 
 from cuttlefish_theme import plugin
-from cuttlefish_theme.chrome import rich_to_prompt_toolkit
 from cuttlefish_theme.color.oklab import hex_to_oklch
 from cuttlefish_theme.color.terminal import quantize_256, _index_to_hex
 from cuttlefish_theme.linework import separator_markup
@@ -73,17 +74,36 @@ def test_status_bar_bg_carries_only_acute_signal():
     assert "#" in amber[0][0] and "#" in red[0][0]
 
 
-def test_renderer_cache_avoids_recomputing_separator(monkeypatch):
+@pytest.mark.parametrize("width", [20, 80, 200])
+def test_status_bar_tint_covers_every_cell(width):
+    """The acute tint must fill the bar, not one cell.
+
+    The core pads a short fragment list to `width` with the EMPTY style, so
+    returning a single space paints 1 cell and leaves the other width-1 stock —
+    an alarm the user cannot see. Measured before this test: 1 of 80 cells.
+    """
+    from hermes_cli.plugins_dispatch import _normalize_chrome_fragments
+
+    for state in ("waiting", "failed"):
+        frags = plugin.chrome_renderer("status_bar_bg", width, ctx(state))
+        normalised = _normalize_chrome_fragments(frags, width)
+        styled = sum(len(text) for style, text in normalised if style)
+        assert styled == width, (
+            f"{state}: only {styled} of {width} status-bar cells carry the tint")
+
+
+def test_renderer_cache_avoids_recomputing_the_field():
+    """The renderer runs on the repaint path, so a repeat call must be served
+    from cache — the field walk is the expensive part, not the formatting."""
+    from cuttlefish_theme.linework import cells
+
+    cells.cache_clear()
     plugin.chrome_renderer("input_rule_top", 80, ctx("idle"))
-    calls = 0
-    def fail(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        raise AssertionError("separator recomputed")
-    import cuttlefish_theme.chrome as chrome
-    monkeypatch.setattr(chrome, "separator_markup", fail)
+    after_first = cells.cache_info()
+    assert after_first.misses == 1
     assert plugin.chrome_renderer("input_rule_top", 80, ctx("idle"))
-    assert calls == 0
+    assert cells.cache_info().misses == 1, "field recomputed on repaint"
+    assert cells.cache_info().hits >= 1
 
 
 def test_renderer_degrades_to_identity_without_pet_state():
@@ -92,11 +112,24 @@ def test_renderer_degrades_to_identity_without_pet_state():
     assert rendered == resting
 
 
-def test_rich_converter_rejects_malformed_markup_and_parses_multiple_cells():
-    assert rich_to_prompt_toolkit("[#112233 on #000000]─[/][#445566 on #000000]━[/]") == [
-        ("fg:#112233 bg:#000000", "─"),
-        ("fg:#445566 bg:#000000", "━"),
-    ]
-    import pytest
-    with pytest.raises(ValueError):
-        rich_to_prompt_toolkit("not rich markup")
+def test_fragments_are_prompt_toolkit_styles_not_rich_markup():
+    """Rich markup handed to a PT control renders styleless, so the styles must
+    be PT's own `fg:#rrggbb bg:#rrggbb` grammar and one glyph per cell."""
+    frags = plugin.chrome_renderer("input_rule_top", 12, ctx("idle"))
+    assert len(frags) == 12
+    for style, text in frags:
+        assert re.fullmatch(r"fg:#[0-9a-f]{6} bg:#[0-9a-f]{6}", style), style
+        assert len(text) == 1 and text in "─━"
+        assert "[" not in style and "/" not in style
+
+
+def test_markup_and_fragments_come_from_one_source():
+    """Both formatters render the same cells, so the rule cannot drift between
+    the skin-data path (Rich) and the live chrome path (prompt_toolkit)."""
+    from cuttlefish_theme.linework import cells, separator_markup
+
+    grid = cells("zivyra", "resting", 12)
+    frags = plugin.chrome_renderer("input_rule_top", 12, ctx("idle"))
+    markup = separator_markup("zivyra", "resting", 12)
+    assert [g for _, _, g in grid] == [t for _, t in frags]
+    assert markup.count("[/]") == len(grid)
