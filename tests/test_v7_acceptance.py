@@ -73,6 +73,41 @@ def test_sessions_and_signals_remain_distinguishable_and_stable() -> None:
     assert seed_for("zivyra") == seed_for("zivyra")
 
 
+def _vivid_indices(session: str, signal: str, width: int = 200) -> set[int]:
+    pairs = CELL.findall(separator(session, signal, width))
+    ground = quantize_256(pairs[0][1])
+    return {quantize_256(fg) for fg, _ in pairs if quantize_256(fg) != ground}
+
+
+def _xterm_oklch(index: int):
+    from cuttlefish_theme.color.oklab import hex_to_oklch
+    from cuttlefish_theme.color.terminal import _index_to_hex
+    return hex_to_oklch(_index_to_hex(index))
+
+
+def test_acute_input_rule_uses_quantised_amber_and_red_without_identity_mix() -> None:
+    for session in ("zivyra", "tilola", "chef"):
+        resting = _vivid_indices(session, "resting")
+        needs_me = _vivid_indices(session, "needs-me")
+        fault = _vivid_indices(session, "fault")
+        assert needs_me and fault
+        assert all(62 <= _xterm_oklch(i).h <= 105 for i in needs_me)
+        assert all(5 <= _xterm_oklch(i).h <= 48 for i in fault)
+        assert len(needs_me & resting) / len(needs_me) <= 0.20
+        assert len(fault & resting) / len(fault) <= 0.20
+
+
+def test_ten_sessions_have_distinct_vivid_pigment_sets_and_separated_accents() -> None:
+    sessions = ("tori-main", "zivyra", "tilola", "chef", "wise", "session-six",
+                "mantis", "adam-chef-01", "alpha", "beta")
+    sets = [_vivid_indices(session, "resting") for session in sessions]
+    assert len({frozenset(colours) for colours in sets}) == len(sessions)
+    from cuttlefish_theme.color.oklab import delta_e_ok
+    assert min(max(delta_e_ok(_xterm_oklch(a), _xterm_oklch(b))
+                   for a in left for b in right)
+               for i, left in enumerate(sets) for right in sets[i + 1:]) >= 0.170
+
+
 def test_rule_preserves_width_and_rich_parseability() -> None:
     from rich.text import Text
 
