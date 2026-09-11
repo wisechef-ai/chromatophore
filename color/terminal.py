@@ -42,6 +42,7 @@ from .oklab import (
 
 __all__ = [
     "quantize_256",
+    "quantize_cube_256",
     "quantize_16",
     "simulate_cvd",
     "contrast_ratio",
@@ -85,6 +86,17 @@ _PALETTE_256 = tuple(
 )
 
 
+def quantize_cube_256(hex_color: str) -> int:
+    """Like :func:`quantize_256`, but never returns a greyscale-ramp index.
+
+    The 232..255 ramp is achromatic, and the cube is sparse in the dark region,
+    so a low-chroma near-black quantises to grey and loses its hue entirely.
+    Callers that need the HUE to survive the terminal (a coloured background
+    behind text) must choose from the 6x6x6 cube at 16..231 instead.
+    """
+    return _nearest_palette_index(hex_color, stop=232)
+
+
 def quantize_256(hex_color: str) -> int:
     """Map a hex colour to the nearest xterm-256 palette index in 16..255.
 
@@ -104,9 +116,14 @@ def quantize_256(hex_color: str) -> int:
     Indices 0..15 (system colours) are never returned: their actual RGB is
     theme-dependent, so a "nearest" claim about them would be a guess.
     """
+    return _nearest_palette_index(hex_color)
+
+
+def _nearest_palette_index(hex_color: str, *, stop: int = 256) -> int:
+    """Nearest palette entry in OKLab, searching indices 16..``stop``-1."""
     lab = srgb_to_oklab(*hex_to_rgb(hex_color))
     best_index, best_d2 = 16, math.inf
-    for offset, entry in enumerate(_PALETTE_256):
+    for offset, entry in enumerate(_PALETTE_256[:stop - 16]):
         d2 = (lab[0] - entry[0]) ** 2 + (lab[1] - entry[1]) ** 2 + (lab[2] - entry[2]) ** 2
         if d2 < best_d2:
             best_d2, best_index = d2, 16 + offset

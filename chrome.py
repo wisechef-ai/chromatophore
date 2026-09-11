@@ -5,29 +5,17 @@ from functools import lru_cache
 from typing import Any
 
 from .color.identity import allocate
-from .color.oklab import oklch_to_hex, srgb_to_oklab, hex_to_rgb
-from .color.terminal import _index_to_hex
+from .color.oklab import oklch_to_hex
+from .color.terminal import _index_to_hex, quantize_cube_256
 from .linework import cells
 from .pattern import ACUTE_AMBER, ACUTE_FAULT, render
 from .session import Signal, collapse
 
-# Where the mantle pigment sits. Lifted from the original 0.235 because the
-# xterm-256 cube has no dark chromatic entries below roughly this lightness —
-# anything darker quantises to grey no matter how much chroma it carries.
+# Where the mantle pigment sits. Lifted from the original 0.235: the xterm-256
+# cube has no dark chromatic entries below roughly this lightness, so anything
+# darker quantises to grey however much chroma it carries.
 _PIGMENT_L = 0.30
 _PIGMENT_C_GAIN = 1.30
-
-# 16..231 is the 6x6x6 colour cube; 232..255 is the greyscale ramp we must avoid.
-_CUBE_INDICES = range(16, 232)
-
-
-@lru_cache(maxsize=256)
-def _nearest_cube_hex(hex_colour: str) -> str:
-    """Nearest xterm-256 COLOUR-CUBE entry, in OKLab, excluding the grey ramp."""
-    target = srgb_to_oklab(*hex_to_rgb(hex_colour))
-    return min((_index_to_hex(i) for i in _CUBE_INDICES),
-               key=lambda candidate: sum(
-                   (a - b) ** 2 for a, b in zip(srgb_to_oklab(*hex_to_rgb(candidate)), target)))
 
 
 @lru_cache(maxsize=32)
@@ -46,7 +34,7 @@ def _mantle_palette(session_id: str) -> tuple[str, str]:
     """
     identity = allocate(session_id)
     wanted = identity.oklch.with_(L=_PIGMENT_L, C=identity.oklch.C * _PIGMENT_C_GAIN)
-    return render(identity).ground_hex, _nearest_cube_hex(oklch_to_hex(wanted))
+    return render(identity).ground_hex, _index_to_hex(quantize_cube_256(oklch_to_hex(wanted)))
 
 
 @lru_cache(maxsize=512)
