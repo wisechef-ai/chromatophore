@@ -237,10 +237,9 @@ def build_palette(
     # shade of calm. The wash is partial (the identity hue still shows through
     # in the ground and the borders) because blanching COVERS identity, it never
     # destroys it — the animal recovers its exact prior pattern afterwards.
-    ground_h, ground_c = h, _clamp(identity.C * 0.30, 0.030, 0.055)
+    ground_c = _clamp(identity.C * 0.30, 0.030, 0.055)
     bar_h, bar_c = h, _clamp(identity.C * 0.42, 0.045, 0.080)
     if signalling:
-        ground_h = _mix_hue(h, sheen.h, 0.55)
         ground_c = _clamp(ground_c * 1.8, 0.020, 0.045)
         bar_h = _mix_hue(h, sheen.h, 0.70)
         bar_c = _clamp(bar_c * 2.0, 0.030, 0.075)

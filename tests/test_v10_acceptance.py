@@ -66,3 +66,63 @@ def test_every_acute_class_stays_readable_behind_body_text():
     for signal in ("resting", "needs_me", "fault"):
         for pigment in _mantle_classes("any-session", signal):
             assert contrast_ratio("#E8E6EA", pigment) >= 4.5, (signal, pigment)
+
+
+_CORPUS = tuple(f"s{n}" for n in range(200))
+
+
+def test_resting_classes_stay_four_distinct_colours_across_many_sessions():
+    """One session id is not coverage.
+
+    The suite asserted readability for a single id and slept through 77 of 1000
+    sessions whose classes quantised onto a shared cube entry — s10 rendered
+    three colours where four were designed. A collapsed class is a session that
+    looks like another session.
+    """
+    from cuttlefish_theme.chrome import _mantle_classes
+
+    collapsed = [sid for sid in _CORPUS if len(set(_mantle_classes(sid, "resting"))) < 4]
+    assert not collapsed, f"{len(collapsed)} sessions lost a class, e.g. {collapsed[:3]}"
+
+
+def test_every_visible_background_is_readable_in_every_signal():
+    from cuttlefish_theme.chrome import _mantle_classes
+    from cuttlefish_theme.color.terminal import contrast_ratio
+
+    for sid in _CORPUS:
+        for signal in ("resting", "needs_me", "fault"):
+            for pigment in _mantle_classes(sid, signal):
+                ratio = contrast_ratio("#E8E6EA", pigment)
+                assert ratio >= 4.5, f"{sid}/{signal} {pigment} at {ratio:.2f}:1"
+
+
+def test_acute_status_bar_carries_a_foreground_it_is_readable_with():
+    """The bar paints OVER fragments that bring their own colours.
+
+    Emitting only a background left prompt_toolkit using the stock #C0C0C0 text,
+    which measured 1.01:1 on quantised amber: the status bar went blank exactly
+    when it had something to say. The plugin owns both halves of the pair.
+    """
+    import re
+
+    from cuttlefish_theme.chrome import chrome_renderer
+    from cuttlefish_theme.color.terminal import _index_to_hex, contrast_ratio, quantize_256
+
+    for state in ("waiting", "failed"):
+        fragments = chrome_renderer("status_bar_bg", 40, {"session_id": "x", "pet_state": state})
+        style = fragments[0][0]
+        background = re.search(r"bg:(#[0-9A-Fa-f]{6})", style).group(1)
+        foreground = [token for token in style.split() if not token.startswith("bg:")]
+        assert foreground, f"{state} emitted a background with no foreground: {style!r}"
+        rendered = _index_to_hex(quantize_256(background))
+        ratio = contrast_ratio(foreground[0], rendered)
+        assert ratio >= 4.5, f"{state}: {foreground[0]} on {rendered} is {ratio:.2f}:1"
+
+
+def test_acute_status_bar_is_the_same_alarm_in_every_session():
+    from cuttlefish_theme.chrome import chrome_renderer
+
+    for state in ("waiting", "failed"):
+        styles = {chrome_renderer("status_bar_bg", 40, {"session_id": sid, "pet_state": state})[0][0]
+                  for sid in _CORPUS[:20]}
+        assert len(styles) == 1, f"{state} alarm differs between sessions: {styles}"

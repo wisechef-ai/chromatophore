@@ -166,13 +166,12 @@ def pigment_set(identity_hex: str, acute_hex: str | None = None) -> tuple[OKLCh,
 
 
 def _legacy_pigment_set(identity_hex: str, acute_hex: str | None = None) -> tuple[OKLCh, ...]:
-    """Historic palette retained for callers of the v9 API."""
     """The pigment classes this session's chromatophores are drawn from.
 
-    Three warm-ish classes spread around the identity hue, mirroring the animal's
-    yellow / red / brown stack. When `acute_hex` is present each class is pulled
-    toward it, so a fault runs visibly hot without flattening the field to one
-    colour.
+    Retained for callers of the v9 API. Three warm-ish classes spread around the
+    identity hue, mirroring the animal's yellow / red / brown stack. When
+    `acute_hex` is present each class is pulled toward it, so a fault runs
+    visibly hot without flattening the field to one colour.
     """
     base = hex_to_oklch(identity_hex)
     acute = hex_to_oklch(acute_hex) if acute_hex else None

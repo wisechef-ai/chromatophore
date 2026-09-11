@@ -89,14 +89,13 @@ def test_mantle_pigment_survives_terminal_quantisation(session_id):
 
     Assert on the QUANTISED index, the way the terminal actually sees it.
     """
-    from cuttlefish_theme.chrome import _mantle_palette
+    from cuttlefish_theme.chrome import _mantle_classes, _mantle_palette
     from cuttlefish_theme.color.terminal import quantize_256
 
-    ground, pigment = _mantle_palette(session_id)
-    ground_index = quantize_256(ground)
-    pigment_index = quantize_256(pigment)
-
-    assert pigment_index != ground_index, "pigment collapsed onto the ground"
-    # 232-255 is the greyscale ramp: landing there means the hue is gone.
-    assert not 232 <= pigment_index <= 255, (
-        f"pigment quantised to grey index {pigment_index} — the mantle has no colour")
+    ground_index = quantize_256(_mantle_palette(session_id))
+    for pigment in _mantle_classes(session_id, "resting"):
+        pigment_index = quantize_256(pigment)
+        assert pigment_index != ground_index, "pigment collapsed onto the ground"
+        # 232-255 is the greyscale ramp: landing there means the hue is gone.
+        assert not 232 <= pigment_index <= 255, (
+            f"pigment quantised to grey index {pigment_index} — the mantle has no colour")

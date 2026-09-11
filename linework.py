@@ -10,7 +10,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from .color.identity import allocate
-from .color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
+from .color.oklab import OKLCh, oklch_to_hex
 from .pattern import render
 from .patterns import field_for
 
