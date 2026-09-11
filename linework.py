@@ -45,6 +45,16 @@ def _signal_time(signal: str) -> float:
     return 0.0
 
 
+@lru_cache(maxsize=32)
+def _body_field(session_id: str, signal: str, width: int, height: int):
+    """The session's body patch, built once and shared by every row.
+
+    Building a 64-row field costs ~45ms; the transcript asks for one row per
+    printed line, so rebuilding per row_key put that on every line of output.
+    """
+    return field_for(session_id, width, height, t=_signal_time(signal))[1]
+
+
 @lru_cache(maxsize=512)
 def cells(session_id: str, signal: str, width: int,
           row_key: int | None = None) -> tuple[tuple[str, str, str], ...]:
@@ -62,8 +72,7 @@ def cells(session_id: str, signal: str, width: int,
     # threshold) gives every seed the same budget, including degenerate fields.
     # Segments (not a global top-N) stop the 2D field's clustering from leaving
     # voids — globally it lit 3 clumps around a 33-cell dead gap.
-    _, field = field_for(session_id, width, 64 if row_key is not None else 3,
-                         t=_signal_time(signal))
+    field = _body_field(session_id, signal, width, 64 if row_key is not None else 3)
     if row_key is None:
         values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
     else:
