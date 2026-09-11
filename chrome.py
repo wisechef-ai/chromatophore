@@ -18,10 +18,13 @@ _BODY_FOREGROUND = "#E8E6EA"
 _AA_RATIO = 4.5
 _DARKENING_STEPS = (0.52, 0.46, 0.40, 0.34, 0.28, 0.22)
 
-# The acute status bar carries its own foreground, so the pair is chosen rather
-# than inherited: dark enough that near-white text clears AA on it by a margin.
-_ACUTE_BAR_L = 0.40
-_ACUTE_BAR_FOREGROUND = "#F5F3F7"
+# The acute status bar is a LOUD surface, not a background: it should catch the
+# eye across a room. Adam, 2026-09-11: "the bars should be bright and the text is
+# white." Pure white on a bright bar is not reachable at AA — #FFAF00 carries
+# white at only 1.84:1 — so the bar sits at the brightest cube entry that still
+# holds white text: measured 4.71:1 (amber) and 5.40:1 (red).
+_ACUTE_BAR_L = 0.57
+_ACUTE_BAR_FOREGROUND = "#FFFFFF"
 
 # (lightness delta, hue delta) tried in order when two classes quantise onto one
 # cube entry. Lightness first — it separates without changing what the class IS.
@@ -83,17 +86,19 @@ def _distinct(colours: tuple[OKLCh, ...]) -> tuple[str, ...]:
     return tuple(taken)
 
 
-def _readable(colour: OKLCh) -> str:
-    """Darken `colour` until the body foreground clears AA on top of it.
+def _readable(colour: OKLCh, foreground: str = _BODY_FOREGROUND) -> str:
+    """Darken `colour` until `foreground` clears AA on top of it.
 
     Quantisation happens first: AA has to hold for the hex the TERMINAL is sent,
-    not the one we asked for.
+    not the one we asked for. The foreground is a parameter because the status
+    bar pairs a bright background with white text, where the body's near-white
+    would give a different answer.
     """
     for lightness in (colour.L, *_DARKENING_STEPS):
         if lightness > colour.L:
             continue
         candidate = _index_to_hex(quantize_cube_256(oklch_to_hex(colour.with_(L=lightness))))
-        if contrast_ratio(_BODY_FOREGROUND, candidate) >= _AA_RATIO:
+        if contrast_ratio(foreground, candidate) >= _AA_RATIO:
             return candidate
     return _index_to_hex(quantize_cube_256(oklch_to_hex(colour.with_(L=_DARKENING_STEPS[-1]))))
 
@@ -132,12 +137,12 @@ def _acute_status_bar(signal: Signal) -> tuple[str, str]:
     #C0C0C0 text at 1.01:1 on quantised amber: the status bar went blank exactly
     when it had something to say.
 
-    No cube colour clears AA against all six status-bar foregrounds at once
-    (#8B8682 sits mid-range and collides with everything), so the background is
-    pinned dark and the foreground near-white rather than hunted for.
+    No cube colour clears AA against all six stock status-bar foregrounds at once
+    (#8B8682 sits mid-range and collides with everything), so the plugin pins its
+    own pair: the brightest cube entry that still carries WHITE text.
     """
     oklch = ACUTE_FAULT if signal is Signal.FAULT else ACUTE_AMBER
-    background = _readable(oklch.with_(L=min(oklch.L, _ACUTE_BAR_L)))
+    background = _readable(oklch.with_(L=_ACUTE_BAR_L), _ACUTE_BAR_FOREGROUND)
     return background, _ACUTE_BAR_FOREGROUND
 
 

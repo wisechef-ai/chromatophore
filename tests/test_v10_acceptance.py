@@ -126,3 +126,65 @@ def test_acute_status_bar_is_the_same_alarm_in_every_session():
         styles = {chrome_renderer("status_bar_bg", 40, {"session_id": sid, "pet_state": state})[0][0]
                   for sid in _CORPUS[:20]}
         assert len(styles) == 1, f"{state} alarm differs between sessions: {styles}"
+
+
+def test_bars_and_mantle_are_drawn_from_one_session_palette():
+    """Adam: "there should be a general colour palette per session."
+
+    The bars once ramped a single hue by lightness while the mantle painted four
+    hue families, so the two surfaces shared a session but looked unrelated. Both
+    now read `chromatophore_set`, so every bar colour traces to a class the
+    mantle also uses. Exact hue equality is NOT the contract — the bars drop
+    alarm-band classes — but a bar hue must never be foreign to the session.
+    """
+    from cuttlefish_theme.linework import _identity_variants
+    from cuttlefish_theme.chrome import _mantle_classes
+    from cuttlefish_theme.color.oklab import hex_to_oklch
+
+    for session in ("chef", "tori-main", "zivyra", "koralen"):
+        mantle = {round(hex_to_oklch(c).h / 30) * 30 for c in _mantle_classes(session, "resting")}
+        bar = {round(hex_to_oklch(c).h / 30) * 30 for c in _identity_variants(session)}
+        assert bar, f"{session} produced no bar palette"
+        assert bar.intersection(mantle), (
+            f"{session}: bar hues {sorted(bar)} share nothing with mantle {sorted(mantle)}")
+
+
+def test_resting_bars_never_wear_the_alarm_colours():
+    """A one-row bar has no room for ambiguity with the alert.
+
+    Sessions legitimately own hues near 100, which quantise onto the same cube
+    entries as the amber alarm (#AF8700). On the mantle that is tolerable — an
+    alarm repaints the whole background — but on a thin bar it makes "needs you"
+    unreadable, so alarm-band classes are dropped from the resting ramp.
+    """
+    from cuttlefish_theme.linework import _acute_variants, _identity_variants
+    from cuttlefish_theme.color.terminal import quantize_256
+
+    for signal in ("needs_me", "fault"):
+        alarm = {quantize_256(c) for c in _acute_variants(signal)}
+        for session in ("chef", "tori-main", "zivyra", "koralen", "tilola"):
+            resting = {quantize_256(c) for c in _identity_variants(session)}
+            shared = resting.intersection(alarm)
+            assert not shared, f"{session} resting bar wears {signal} colours {shared}"
+
+
+def test_the_acute_bar_is_bright_and_carries_white_text():
+    """Adam: "the bars should be bright and the text is white."
+
+    Pure white on a bright bar is not reachable at AA — #FFAF00 carries white at
+    1.84:1 — so the bar takes the brightest cube entry that still holds white.
+    """
+    import re
+
+    from cuttlefish_theme.chrome import chrome_renderer
+    from cuttlefish_theme.color.oklab import hex_to_oklch
+    from cuttlefish_theme.color.terminal import _index_to_hex, contrast_ratio, quantize_256
+
+    for state in ("waiting", "failed"):
+        style = chrome_renderer("status_bar_bg", 40, {"session_id": "x", "pet_state": state})[0][0]
+        background = re.search(r"bg:(#[0-9A-Fa-f]{6})", style).group(1)
+        foreground = [token for token in style.split() if not token.startswith("bg:")]
+        assert foreground == ["#FFFFFF"], f"{state} text is {foreground}, not white"
+        rendered = _index_to_hex(quantize_256(background))
+        assert hex_to_oklch(rendered).L >= 0.50, f"{state} bar L={hex_to_oklch(rendered).L:.2f} is not bright"
+        assert contrast_ratio("#FFFFFF", rendered) >= 4.5
