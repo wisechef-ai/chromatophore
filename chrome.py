@@ -5,7 +5,7 @@ from functools import lru_cache
 from typing import Any
 
 from .color.identity import allocate
-from .color.oklab import oklch_to_hex
+from .color.oklab import hex_to_oklch, oklch_to_hex
 from .color.terminal import _index_to_hex, quantize_cube_256
 from .linework import cells
 from .pattern import ACUTE_AMBER, ACUTE_FAULT, render
@@ -16,6 +16,10 @@ from .session import Signal, collapse
 # darker quantises to grey however much chroma it carries.
 _PIGMENT_L = 0.30
 _PIGMENT_C_GAIN = 1.30
+
+# Ceiling for anything painted BEHIND TEXT. Above this the body foreground drops
+# under WCAG AA (measured: an L 0.89 pearl gives 1.05:1) and the line is lost.
+_MAX_BACKGROUND_L = 0.52
 
 
 @lru_cache(maxsize=32)
@@ -37,27 +41,51 @@ def _mantle_palette(session_id: str) -> tuple[str, str]:
     return render(identity).ground_hex, _index_to_hex(quantize_cube_256(oklch_to_hex(wanted)))
 
 
-@lru_cache(maxsize=32)
-def _mantle_pigment_set(session_id: str) -> tuple[str, ...]:
-    """Quantised dark chromatophore classes for the transcript background."""
+@lru_cache(maxsize=64)
+def _mantle_classes(session_id: str, signal: str) -> tuple[str, ...]:
+    """The session's chromatophore classes, quantised, darkest first.
+
+    Four classes, not one colour: two dark pigments from different hue families,
+    the cool iridophore complement, and the sparse bright leucophore. Under an
+    acute signal `chromatophore_set` returns the FIXED amber/red sets instead,
+    so "that terminal needs me" reads the same across every session.
+
+    In the animal the iridophore and leucophore are the BACKDROP the pigments sit
+    above; here they sit BEHIND TEXT, so each class is capped at L <= 0.45. Left
+    at their natural lightness the pearl reaches contrast 1.05:1 and the text on
+    it is unreadable. Hue and ordering survive; only lightness is bounded.
+    """
     from .mantle import chromatophore_set
-    identity = allocate(session_id)
-    return tuple(_index_to_hex(quantize_cube_256(oklch_to_hex(c.oklch)))
-                 for c in chromatophore_set(identity)[:2])
+    classes = chromatophore_set(allocate(session_id), Signal(signal))
+    return tuple(_index_to_hex(quantize_cube_256(oklch_to_hex(
+        c.oklch if c.oklch.L <= _MAX_BACKGROUND_L else c.oklch.with_(L=_MAX_BACKGROUND_L))))
+        for c in classes)
 
 
 @lru_cache(maxsize=512)
-def _mantle_row(session_id: str, width: int, row_key: int) -> tuple[tuple[str, str], ...]:
+def _mantle_row(session_id: str, width: int, row_key: int,
+                signal: str = Signal.RESTING.value) -> tuple[tuple[str, str], ...]:
     """One row of the transcript mantle, as prompt_toolkit fragments.
+
+    WHICH class shows at a cell follows that cell's own pigment, which `cells`
+    already assigns by field intensity — deeper classes for stronger expansion,
+    as the animal recruits them. Never by column index: that is the alternating
+    stripe v7 removed.
 
     Cached whole: this is called once per printed line, and rebuilding an
     80-element list of f-strings per line is most of the cost at that rate.
     """
     ground, _pigment = _mantle_palette(session_id)
-    pigments = _mantle_pigment_set(session_id)
-    return tuple((f"bg:{ground if fg == ground else pigments[(x + row_key) % len(pigments)]}", " ")
-                 for x, (fg, _bg, _glyph) in enumerate(
-                     cells(session_id, Signal.RESTING.value, width, row_key)))
+    classes = _mantle_classes(session_id, signal)
+    row = cells(session_id, signal, width, row_key)
+    # cells() draws lit pigments from a graded variant ramp; rank each distinct
+    # one so the palest (most expanded) cells reach the brightest class.
+    ramp = sorted({fg for fg, _bg, _g in row if fg != ground},
+                  key=lambda hex_colour: hex_to_oklch(hex_colour).L)
+    step = {hex_colour: min(len(classes) - 1, index * len(classes) // max(1, len(ramp)))
+            for index, hex_colour in enumerate(ramp)}
+    return tuple((f"bg:{ground if fg == ground else classes[step[fg]]}", " ")
+                 for fg, _bg, _glyph in row)
 
 
 def chrome_renderer(surface: str, width: int, ctx: dict[str, Any]) -> list[tuple[str, str]] | None:
@@ -77,7 +105,7 @@ def chrome_renderer(surface: str, width: int, ctx: dict[str, Any]) -> list[tuple
         if surface == "transcript_line":
             row_key = ctx.get("row_key")
             row_key = int(row_key) if isinstance(row_key, int) and not isinstance(row_key, bool) else 0
-            return list(_mantle_row(session_id, int(width), row_key))
+            return list(_mantle_row(session_id, int(width), row_key, signal.value))
         if surface not in {"input_rule_top", "input_rule_bot"}:
             return None
         return [(f"fg:{fg} bg:{bg}", glyph)

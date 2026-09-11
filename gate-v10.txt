@@ -1,0 +1,84 @@
+lint ok
+........................................................................ [ 27%]
+........................................................................ [ 55%]
+........................................................................ [ 83%]
+...........................................                              [100%]
+259 passed in 14.17s
+
+cuttlefish-theme — live repaint proof
+
+  isolated HERMES_HOME = /tmp/cuttle-live-proof-nj6zzrrp
+
+  [PASS] skin file written — cuttle-20260908_170000_proof01.yaml
+  [PASS] skin activated — cuttle-20260908_170000_proof01
+  [PASS] accent carries the identity hue — #EC4ACF h336 vs identity #FF94E7 h336
+  [PASS] accent is vivid (measured animal band C>=0.16) — C 0.240
+  [PASS] resting has no acute layer
+  [PASS] resting label is silent — ''
+  [PASS] acute layer present — #F1B200
+  [PASS] accent switched to the acute hue — #C28F00 h83 vs acute #F1B200 h83
+  [PASS] accent actually CHANGED from resting — #EC4ACF -> #C28F00
+  [PASS] prompt_toolkit style overrides changed too — this is what a running app re-reads
+  [PASS] age is carried as TEXT — 'INPUT 4m'
+  [PASS] identity restored after the acute signal clears — #EC4ACF == #EC4ACF
+  [PASS] identity hex never mutated across states — #FF94E7
+  [PASS] overrides form a valid prompt_toolkit Style — 42 keys
+  [PASS] get_app_or_none is reachable — None outside a running app, which is correct here
+
+  all checks passed — live repaint mechanism verified
+
+
+cuttlefish-theme — running-application repaint proof
+
+  isolated HERMES_HOME = /tmp/cuttle-app-proof-kw9k206q
+
+  [PASS] application is running
+    (current app on this worker thread: present — either way, resolution must not depend on it)
+  [PASS] CLI resolved without relying on a current app — FakeHermesCLI
+  [PASS] apply_palette_now reported a repaint
+  [PASS] app style now shows the identity colour — prompt=E07A00
+  [PASS] THE APP'S OWN STYLE CHANGED on the acute signal — E07A00 -> C28F00
+  [PASS] acute colour carries the amber hue — #C28F00 h83 vs #F1B200 h83
+  [PASS] identity returns when the signal clears — C28F00 -> E07A00
+
+  a running application really does repaint
+
+
+cuttlefish-theme — animated transition proof
+
+  isolated HERMES_HOME = /tmp/cuttle-anim-proof-6gs4nylh
+
+  [PASS] first paint reached the running app
+  [PASS] no animation on first paint
+  [PASS] blanch emitted MANY frames, not one snap — 13 styles reached the app
+  [PASS] every frame was a distinct appearance — 13 unique
+  [PASS] blanch kept to its measured duration — 0.42s (curve says 0.4s)
+  [PASS] landed on the fault hue — #F51F27 h27 vs #E24942 h27
+  [PASS] fault accent is vivid — C 0.240
+  [PASS] the app's style object was actually replaced
+  [PASS] recovery emitted its own frames — 73 styles
+  [PASS] recovery was SLOWER than the blanch (Nature 2023, Fig. 5b) — blanch 0.42s < recover 2.42s
+  [PASS] identity restored exactly — #009D6B == #009D6B
+  [PASS] identity hex never mutated underneath — #029D6B
+  [PASS] background is set by the theme — #0B0C10
+  [PASS] background is near-black — #0B0C10 L 0.155
+  [PASS] background has the shared navy hue — #0B0C10 h274 (required h270)
+  [PASS] idle ticks repaint NOTHING — 0 repaints while resting
+  [PASS] stop interrupts an in-flight transition — 0.02s
+
+  all checks passed — animated repaint verified against a running app
+
+
+cuttlefish-theme — terminal paint proof
+
+  captured 42855 bytes, 47 distinct truecolor values
+
+  [PASS] the terminal painted SOMETHING in truecolor — 47 colours
+  [PASS] the terminal is NOT painting stock Hermes gold — no stock palette colours
+  [PASS] colours beyond the stock palette are present — 47 non-stock: ['#001145', '#00173F', '#001B3D', '#00203C', '#00233C', '#00283D', '#009B92', '#009CF5']
+  [PASS] a near-black ground is on screen
+  [PASS] a vivid accent is on screen
+
+  the real terminal paints this session's skin
+
+EXIT_CODE=0
