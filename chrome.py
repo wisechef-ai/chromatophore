@@ -51,15 +51,16 @@ def _mantle_classes(session_id: str, signal: str) -> tuple[str, ...]:
     so "that terminal needs me" reads the same across every session.
 
     In the animal the iridophore and leucophore are the BACKDROP the pigments sit
-    above; here they sit BEHIND TEXT, so each class is capped at L <= 0.45. Left
-    at their natural lightness the pearl reaches contrast 1.05:1 and the text on
-    it is unreadable. Hue and ordering survive; only lightness is bounded.
+    above; here they sit BEHIND TEXT, so every class is capped at
+    ``_MAX_BACKGROUND_L``. Left at its natural lightness the pearl reaches
+    contrast 1.05:1 and the line on it is unreadable. Hue and ordering survive;
+    only lightness is bounded.
     """
     from .mantle import chromatophore_set
-    classes = chromatophore_set(allocate(session_id), Signal(signal))
-    return tuple(_index_to_hex(quantize_cube_256(oklch_to_hex(
-        c.oklch if c.oklch.L <= _MAX_BACKGROUND_L else c.oklch.with_(L=_MAX_BACKGROUND_L))))
-        for c in classes)
+    return tuple(
+        _index_to_hex(quantize_cube_256(oklch_to_hex(
+            c.oklch.with_(L=min(c.oklch.L, _MAX_BACKGROUND_L)))))
+        for c in chromatophore_set(allocate(session_id), Signal(signal)))
 
 
 @lru_cache(maxsize=512)
@@ -78,13 +79,12 @@ def _mantle_row(session_id: str, width: int, row_key: int,
     ground, _pigment = _mantle_palette(session_id)
     classes = _mantle_classes(session_id, signal)
     row = cells(session_id, signal, width, row_key)
-    # cells() draws lit pigments from a graded variant ramp; rank each distinct
-    # one so the palest (most expanded) cells reach the brightest class.
+    # cells() draws its lit pigments from a graded ramp; rank the distinct ones by
+    # lightness so the most expanded cells reach the brightest class.
     ramp = sorted({fg for fg, _bg, _g in row if fg != ground},
-                  key=lambda hex_colour: hex_to_oklch(hex_colour).L)
-    step = {hex_colour: min(len(classes) - 1, index * len(classes) // max(1, len(ramp)))
-            for index, hex_colour in enumerate(ramp)}
-    return tuple((f"bg:{ground if fg == ground else classes[step[fg]]}", " ")
+                  key=lambda pigment: hex_to_oklch(pigment).L)
+    band = {pigment: rank * len(classes) // len(ramp) for rank, pigment in enumerate(ramp)}
+    return tuple((f"bg:{ground if fg == ground else classes[band[fg]]}", " ")
                  for fg, _bg, _glyph in row)
 
 
