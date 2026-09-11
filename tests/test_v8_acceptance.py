@@ -24,7 +24,7 @@ def vivid_hues(fragments):
     ground = quantize_256(render(allocate("zivyra")).ground_hex)
     hues = []
     for style, text in fragments:
-        fg = re.search(r"fg:(#[0-9a-f]{6})", style).group(1)
+        fg = re.search(r"fg:(#[0-9a-fA-F]{6})", style).group(1)
         if quantize_256(fg) != ground:
             hues.append(hex_to_oklch(_index_to_hex(quantize_256(fg))).h)
     return hues
@@ -118,7 +118,7 @@ def test_fragments_are_prompt_toolkit_styles_not_rich_markup():
     frags = plugin.chrome_renderer("input_rule_top", 12, ctx("idle"))
     assert len(frags) == 12
     for style, text in frags:
-        assert re.fullmatch(r"fg:#[0-9a-f]{6} bg:#[0-9a-f]{6}", style), style
+        assert re.fullmatch(r"fg:#[0-9a-fA-F]{6} bg:#[0-9a-fA-F]{6}", style), style
         assert len(text) == 1 and text in "─━"
         assert "[" not in style and "/" not in style
 

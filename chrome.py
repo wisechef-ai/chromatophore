@@ -25,7 +25,7 @@ def chrome_renderer(surface: str, width: int, ctx: dict[str, Any]) -> list[tuple
         session_id = ctx.get("session_id")
         if not isinstance(session_id, str) or not session_id:
             return None
-        return [(f"fg:{fg.lower()} bg:{bg.lower()}", glyph)
+        return [(f"fg:{fg} bg:{bg}", glyph)
                 for fg, bg, glyph in cells(session_id, signal.value, int(width))]
     except Exception:
         return None
