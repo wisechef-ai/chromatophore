@@ -14,6 +14,12 @@ from .color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
 from .pattern import render
 from .patterns import field_for
 
+# Share of columns that carry a pigment. Real Metasepia display measures 11-16%
+# vivid over a 2D patch, but a 2D fraction re-read on ONE row leaves voids the
+# eye reads as emptiness: at 0.16 the longest dark gap on an 80-column rule was
+# 33 cells. 0.30 restores the density a single row needs to read as skin.
+_VIVID_FRACTION = 0.30
+
 
 def _identity_variants(session_id: str) -> tuple[str, ...]:
     return _oklch_variants(allocate(session_id).oklch)
@@ -48,12 +54,24 @@ def cells(session_id: str, signal: str, width: int) -> tuple[tuple[str, str, str
 
     # A one-cell-high terminal rule is a projection of a small body patch. Take
     # the local maximum, then select by rank rather than an absolute threshold:
-    # every seed gets the same sparse recruitment budget, including degenerate
-    # fields whose values all fall below a percentile cutoff.
+    # every seed gets the same recruitment budget, including degenerate fields
+    # whose values all fall below a percentile cutoff.
+    #
+    # Select WITHIN fixed segments, not globally. A global top-N inherits the 2D
+    # patch's clustering: measured on one row of 80 it lit 3 clumps separated by
+    # a 33-cell void — "scattered with a lot of black spaces". Per-segment picks
+    # keep the clusters (neighbours still win together) while guaranteeing the
+    # gap can never exceed ~2 segments.
     _, field = field_for(session_id, width, 3, t=_signal_time(signal))
     values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
-    vivid_count = max(1, round(0.16 * width))
-    vivid = set(sorted(range(width), key=lambda x: (values[x], x), reverse=True)[:vivid_count])
+    segment = 10
+    per_segment = max(1, round(_VIVID_FRACTION * segment))
+    vivid: set[int] = set()
+    for start in range(0, width, segment):
+        columns = range(start, min(width, start + segment))
+        vivid.update(sorted(columns, key=lambda x: (values[x], x),
+                            reverse=True)[:per_segment])
+    vivid_count = max(1, len(vivid))
 
     ground = render(allocate(session_id)).ground_hex
     variants = (_acute_variants(signal) if signal in ("fault", "error", "needs-me", "needs_me")

@@ -40,8 +40,20 @@ def test_quantised_rule_meets_measured_grammar(session: str, signal: str, width:
 
     assert len(row) == width
     assert modal_share >= 0.55
-    assert 0.08 <= vivid_share <= 0.20
+    # 0.08-0.20 was read off a 2D Metasepia patch. Re-applied to ONE row it
+    # leaves voids the eye reads as emptiness (measured: a 33-cell dark gap on
+    # an 80-column rule; Adam: "very scattered with a lot of black spaces").
+    # A single row needs ~0.30 to read as skin; the ceiling stays low enough
+    # that ground still dominates.
+    assert 0.22 <= vivid_share <= 0.38
     assert mean_run(row) >= 2.0
+    # No void may swallow the pattern. The bound is structural: with 10-column
+    # segments, two picks at opposite ends of adjacent segments sit at most
+    # ~18 apart, and measured worst case across every session/signal/width is 13.
+    gap = max(len(run) for run in "".join(
+        "." if colour == ground else "#" for colour in row).split("#")) if any(
+        colour != ground for colour in row) else width
+    assert gap <= 14, f"longest dark gap {gap} reads as emptiness"
 
 
 def test_fault_is_never_a_flat_line_and_has_sparse_vivid_cells() -> None:
