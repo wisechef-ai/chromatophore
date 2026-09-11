@@ -52,39 +52,33 @@ def cells(session_id: str, signal: str, width: int) -> tuple[tuple[str, str, str
     if not width:
         return ()
 
-    # A one-cell-high terminal rule is a projection of a small body patch. Take
-    # the local maximum, then select by rank rather than an absolute threshold:
-    # every seed gets the same recruitment budget, including degenerate fields
-    # whose values all fall below a percentile cutoff.
-    #
-    # Select WITHIN fixed segments, not globally. A global top-N inherits the 2D
-    # patch's clustering: measured on one row of 80 it lit 3 clumps separated by
-    # a 33-cell void — "scattered with a lot of black spaces". Per-segment picks
-    # keep the clusters (neighbours still win together) while guaranteeing the
-    # gap can never exceed ~2 segments.
+    # A one-cell-high rule is a projection of a small body patch: take the local
+    # maximum, then pick by rank per 10-column segment. Rank (not an absolute
+    # threshold) gives every seed the same budget, including degenerate fields.
+    # Segments (not a global top-N) stop the 2D field's clustering from leaving
+    # voids — globally it lit 3 clumps around a 33-cell dead gap.
     _, field = field_for(session_id, width, 3, t=_signal_time(signal))
     values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
+    hottest = lambda columns, n: sorted(columns, key=lambda x: (values[x], x), reverse=True)[:n]
     segment = 10
-    per_segment = max(1, round(_VIVID_FRACTION * segment))
-    vivid: set[int] = set()
-    for start in range(0, width, segment):
-        columns = range(start, min(width, start + segment))
-        vivid.update(sorted(columns, key=lambda x: (values[x], x),
-                            reverse=True)[:per_segment])
-    vivid_count = max(1, len(vivid))
+    vivid = {x for start in range(0, width, segment)
+             for x in hottest(range(start, min(width, start + segment)),
+                              max(1, round(_VIVID_FRACTION * segment)))}
 
     ground = render(allocate(session_id)).ground_hex
     variants = (_acute_variants(signal) if signal in ("fault", "error", "needs-me", "needs_me")
                 else _identity_variants(session_id))
-    ranked_vivid = sorted(vivid, key=lambda x: (values[x], x), reverse=True)
+    rank = {x: i for i, x in enumerate(hottest(vivid, len(vivid)))}
     out: list[tuple[str, str, str]] = []
     for x, value in enumerate(values):
         if x not in vivid:
             out.append((ground, ground, "─"))
         else:
-            rank = ranked_vivid.index(x)
-            colour = variants[min(len(variants) - 1, int((rank + 1) * len(variants) / vivid_count))]
-            out.append((colour, ground, "━" if value >= 0.70 else "─"))
+            # Brightest cell gets the palest pigment — retracted skin reveals
+            # the layer beneath, it does not simply go dark.
+            step = int((rank[x] + 1) * len(variants) / len(vivid))
+            out.append((variants[min(len(variants) - 1, step)], ground,
+                        "━" if value >= 0.70 else "─"))
     return tuple(out)
 
 
