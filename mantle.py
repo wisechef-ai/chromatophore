@@ -143,8 +143,12 @@ def chromatophore_set(identity_or_palette, signal=None) -> tuple[Chromatophore, 
     pearl_hue = (base.h + ((seed >> 32) % 25) - 12) % 360
     pigment_chroma = min(.22, max(.12, base.C * 1.2))
     pigment_lightness = .265 + ((seed >> 48) % 10) * .005
+    # The two classes sit at DIFFERENT depths in the animal (yellow over red over
+    # brown), and they must also quantise to different cube entries: given the
+    # same lightness, two nearby hues collapse onto one index and the session
+    # loses half its signature. Separating them is both the biology and the fix.
     a = OKLCh(pigment_lightness, pigment_chroma, a_hue)
-    b = OKLCh(pigment_lightness, pigment_chroma, b_hue)
+    b = OKLCh(pigment_lightness + .105, pigment_chroma, b_hue)
     cool_lightness = .44 + ((seed >> 40) % 15) * .015
     return (Chromatophore("pigment-a", "identity-a", a, .40),
             Chromatophore("pigment-b", "identity-b", b, .40),
