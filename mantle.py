@@ -119,6 +119,7 @@ def chromatophore_set(identity_or_palette, signal=None) -> tuple[Chromatophore, 
     Resting pigments are dark and identity-derived. Acute sets are fixed so an
     operator can recognise NEEDS_ME/FAULT across six terminals at once.
     """
+    session_id = getattr(identity_or_palette, "session_id", None)
     identity = (identity_or_palette.identity_hex if hasattr(identity_or_palette, "identity_hex")
                 else identity_or_palette.hex if hasattr(identity_or_palette, "hex")
                 else identity_or_palette)
@@ -130,12 +131,25 @@ def chromatophore_set(identity_or_palette, signal=None) -> tuple[Chromatophore, 
                 Chromatophore("pigment-b", "amber" if key == "needs_me" else "red", vals[1], .40),
                 Chromatophore("iridophore", "cool", vals[2], .14),
                 Chromatophore("leucophore", "leucophore", vals[3], .06))
-    a = OKLCh(.30, min(.22, max(.12, base.C * 1.2)), (base.h - 55) % 360)
-    b = OKLCh(.30, min(.22, max(.12, base.C * 1.2)), (base.h + 125) % 360)
+    # The allocated identity is continuous, but the terminal ultimately sees a
+    # quantised class SET. Use the one approved stable seed to perturb the class
+    # arrangement, so sessions whose identity colours land on the same cube entry
+    # still retain distinct multi-pigment signatures.
+    seed = seed_for(session_id or identity)
+    hue_shift = ((seed >> 8) % 41) - 20
+    a_hue = (base.h - 55.0 + hue_shift) % 360
+    b_hue = (base.h + 125.0 - (seed % 17)) % 360
+    cool_hue = (base.h + 180.0 + ((seed >> 24) % 31) - 15) % 360
+    pearl_hue = (base.h + ((seed >> 32) % 25) - 12) % 360
+    pigment_chroma = min(.22, max(.12, base.C * 1.2))
+    pigment_lightness = .265 + ((seed >> 48) % 10) * .005
+    a = OKLCh(pigment_lightness, pigment_chroma, a_hue)
+    b = OKLCh(pigment_lightness, pigment_chroma, b_hue)
+    cool_lightness = .44 + ((seed >> 40) % 15) * .015
     return (Chromatophore("pigment-a", "identity-a", a, .40),
             Chromatophore("pigment-b", "identity-b", b, .40),
-            Chromatophore("iridophore", "cool", OKLCh(.55, .10, (base.h + 180) % 360), .14),
-            Chromatophore("leucophore", "leucophore", OKLCh(.90, .03, base.h), .06))
+            Chromatophore("iridophore", "cool", OKLCh(cool_lightness, .10, cool_hue), .14),
+            Chromatophore("leucophore", "leucophore", OKLCh(.82 + ((seed >> 56) % 10) * .012, .03, pearl_hue), .06))
 
 
 def pigment_set(identity_hex: str, acute_hex: str | None = None) -> tuple[OKLCh, ...]:
