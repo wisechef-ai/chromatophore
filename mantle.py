@@ -108,7 +108,11 @@ class Chromatophore:
 # Acute classes are deliberately shared across sessions: dominance is semantic,
 # while only the resting classes carry identity.
 _ACUTE_SETS = {
-    "needs_me": (OKLCh(.40, .18, 68), OKLCh(.46, .17, 86), OKLCh(.68, .09, 205), OKLCh(.90, .03, 85)),
+    # Pigment B carries the amber. Below L .50 at this chroma BOTH warm pigments
+    # quantise onto #5F5F00 -- one olive class at hue 110, which reads GREEN and
+    # says the opposite of "needs you". L .50 is the lowest that reaches true
+    # amber #875F00 (hue 80) while clearing AA behind body text at 4.62:1.
+    "needs_me": (OKLCh(.40, .18, 68), OKLCh(.50, .16, 75), OKLCh(.68, .09, 205), OKLCh(.90, .03, 85)),
     "fault": (OKLCh(.38, .20, 20), OKLCh(.46, .19, 34), OKLCh(.60, .08, 220), OKLCh(.90, .03, 20)),
 }
 

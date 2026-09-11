@@ -5,8 +5,8 @@ from functools import lru_cache
 from typing import Any
 
 from .color.identity import allocate
-from .color.oklab import hex_to_oklch, oklch_to_hex
-from .color.terminal import _index_to_hex, quantize_cube_256
+from .color.oklab import OKLCh, hex_to_oklch, oklch_to_hex
+from .color.terminal import _index_to_hex, contrast_ratio, quantize_cube_256
 from .linework import cells
 from .pattern import ACUTE_AMBER, ACUTE_FAULT, render
 from .session import Signal, collapse
@@ -17,9 +17,12 @@ from .session import Signal, collapse
 _PIGMENT_L = 0.30
 _PIGMENT_C_GAIN = 1.30
 
-# Ceiling for anything painted BEHIND TEXT. Above this the body foreground drops
-# under WCAG AA (measured: an L 0.89 pearl gives 1.05:1) and the line is lost.
-_MAX_BACKGROUND_L = 0.52
+# Anything painted BEHIND TEXT must clear WCAG AA against the body foreground.
+# A lightness ceiling only approximates this: at L .52 a dark red clears 4.6:1
+# while an equally light green reaches 4.1:1, so the ratio is measured instead.
+_BODY_FOREGROUND = "#E8E6EA"
+_AA_RATIO = 4.5
+_DARKENING_STEPS = (0.52, 0.46, 0.40, 0.34, 0.28, 0.22)
 
 
 @lru_cache(maxsize=32)
@@ -51,16 +54,29 @@ def _mantle_classes(session_id: str, signal: str) -> tuple[str, ...]:
     so "that terminal needs me" reads the same across every session.
 
     In the animal the iridophore and leucophore are the BACKDROP the pigments sit
-    above; here they sit BEHIND TEXT, so every class is capped at
-    ``_MAX_BACKGROUND_L``. Left at its natural lightness the pearl reaches
-    contrast 1.05:1 and the line on it is unreadable. Hue and ordering survive;
-    only lightness is bounded.
+    above; here they sit BEHIND TEXT, so every class is darkened until it clears
+    WCAG AA against the body foreground. Lightness alone is the wrong guard: a
+    saturated green at L .52 still reaches only 4.1:1, so the contract is
+    measured directly rather than approximated. Hue and ordering survive.
     """
     from .mantle import chromatophore_set
-    return tuple(
-        _index_to_hex(quantize_cube_256(oklch_to_hex(
-            c.oklch.with_(L=min(c.oklch.L, _MAX_BACKGROUND_L)))))
-        for c in chromatophore_set(allocate(session_id), Signal(signal)))
+    return tuple(_readable(c.oklch)
+                 for c in chromatophore_set(allocate(session_id), Signal(signal)))
+
+
+def _readable(colour: OKLCh) -> str:
+    """Darken `colour` until the body foreground clears AA on top of it.
+
+    Quantisation happens first: AA has to hold for the hex the TERMINAL is sent,
+    not the one we asked for.
+    """
+    for lightness in (colour.L, *_DARKENING_STEPS):
+        if lightness > colour.L:
+            continue
+        candidate = _index_to_hex(quantize_cube_256(oklch_to_hex(colour.with_(L=lightness))))
+        if contrast_ratio(_BODY_FOREGROUND, candidate) >= _AA_RATIO:
+            return candidate
+    return _index_to_hex(quantize_cube_256(oklch_to_hex(colour.with_(L=_DARKENING_STEPS[-1]))))
 
 
 @lru_cache(maxsize=512)
