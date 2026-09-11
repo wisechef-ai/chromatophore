@@ -36,30 +36,36 @@ def separator_markup(session_id: str, signal: str, width: int) -> str:
     if not width:
         return ""
 
-    # A one-cell-high terminal rule is a projection of a small body patch. Taking
-    # the local maximum preserves transverse recruitment without turning a dark
-    # pattern into a flat line; the percentile cut keeps retracted skin dominant.
+    # A one-cell-high terminal rule is a projection of a small body patch. Take
+    # the local maximum, then select by rank rather than an absolute threshold:
+    # every seed gets the same sparse recruitment budget, including degenerate
+    # fields whose values all fall below a percentile cutoff.
     _, field = field_for(session_id, width, 3, t=_signal_time(signal))
     values = [max(field.get(x, y) for y in range(field.height)) for x in range(width)]
-    ordered = sorted(values)
-    cutoff_index = 0.48 if signal in ("needs-me", "needs_me") else (0.66 if signal in ("fault", "error") else 0.58)
-    cutoff = ordered[min(len(ordered) - 1, int(len(ordered) * cutoff_index))]
+    vivid_count = max(1, round(0.16 * width))
+    vivid = set(sorted(range(width), key=lambda x: (values[x], x), reverse=True)[:vivid_count])
 
     ground = render(allocate(session_id)).ground_hex
-    pigments = tuple(pigment_hex(name) for name in dominant_pigments(session_id))
+    names = dominant_pigments(session_id)
     parts: list[str] = []
+    ranked_vivid = sorted(vivid, key=lambda x: (values[x], x), reverse=True)
     for x, value in enumerate(values):
-        if value <= cutoff:
+        if x not in vivid:
             colour = ground
             glyph = "─"
         else:
-            # Intensity chooses among this session's 2–3 chromatophore hues. It
-            # remains a body grammar: neighbouring values recruit neighbouring
-            # pigments, rather than exposing every global palette colour.
-            level = (value - cutoff) / max(1e-9, 1.0 - cutoff)
-            pigment = pigments[min(len(pigments) - 1, int(level * len(pigments)))]
-            variants = _pigment_variants(dominant_pigments(session_id)[min(len(pigments) - 1, int(level * len(pigments)))])
-            colour = variants[min(len(variants) - 1, int(level * len(variants)))]
+            # Acute signals recruit a different identity pigment. Fault also
+            # uses the companion pigment for some pearls, guaranteeing more than
+            # a single quantised colour even when the field is degenerate.
+            if signal in ("fault", "error") and len(names) > 1:
+                pigment_index = 0 if ranked_vivid.index(x) % 3 else 1
+            elif signal in ("needs-me", "needs_me") and len(names) > 1:
+                pigment_index = 1
+            else:
+                pigment_index = 0
+            rank = ranked_vivid.index(x)
+            variants = _pigment_variants(names[pigment_index])
+            colour = variants[min(len(variants) - 1, int((rank + 1) * len(variants) / vivid_count))]
             glyph = "━" if value >= 0.70 else "─"
         parts.append(f"[{colour} on {ground}]{glyph}[/]")
     return "".join(parts)
