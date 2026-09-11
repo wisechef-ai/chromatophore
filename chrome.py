@@ -5,22 +5,48 @@ from functools import lru_cache
 from typing import Any
 
 from .color.identity import allocate
-from .color.oklab import oklch_to_hex
+from .color.oklab import oklch_to_hex, srgb_to_oklab, hex_to_rgb
+from .color.terminal import _index_to_hex
 from .linework import cells
 from .pattern import ACUTE_AMBER, ACUTE_FAULT, render
 from .session import Signal, collapse
+
+# Where the mantle pigment sits. Lifted from the original 0.235 because the
+# xterm-256 cube has no dark chromatic entries below roughly this lightness —
+# anything darker quantises to grey no matter how much chroma it carries.
+_PIGMENT_L = 0.30
+_PIGMENT_C_GAIN = 1.30
+
+# 16..231 is the 6x6x6 colour cube; 232..255 is the greyscale ramp we must avoid.
+_CUBE_INDICES = range(16, 232)
+
+
+@lru_cache(maxsize=256)
+def _nearest_cube_hex(hex_colour: str) -> str:
+    """Nearest xterm-256 COLOUR-CUBE entry, in OKLab, excluding the grey ramp."""
+    target = srgb_to_oklab(*hex_to_rgb(hex_colour))
+    return min((_index_to_hex(i) for i in _CUBE_INDICES),
+               key=lambda candidate: sum(
+                   (a - b) ** 2 for a, b in zip(srgb_to_oklab(*hex_to_rgb(candidate)), target)))
 
 
 @lru_cache(maxsize=32)
 def _mantle_palette(session_id: str) -> tuple[str, str]:
     """(ground, pigment) for a session's transcript mantle.
 
-    Both are session constants, and `render(allocate(...))` alone costs ~46us —
-    far too much to repeat for every printed line.
+    The pigment is snapped to the nearest xterm-256 COLOUR CUBE entry, never a
+    free hex. prompt_toolkit renders at DEPTH_8_BIT, so whatever we emit is
+    quantised before it reaches the screen, and the 256 palette is sparse in the
+    dark region: a low-chroma near-black lands on the greyscale ramp (232-255)
+    and the mantle arrives as flat grey. Measured: 5 of 8 sessions collapsed.
+    Choosing from the cube makes the hue survive by construction.
+
+    Both values are session constants and `render(allocate(...))` alone costs
+    ~46us, far too much to repeat for every printed line.
     """
     identity = allocate(session_id)
-    return (render(identity).ground_hex,
-            oklch_to_hex(identity.oklch.with_(L=0.235, C=identity.oklch.C * 0.80)))
+    wanted = identity.oklch.with_(L=_PIGMENT_L, C=identity.oklch.C * _PIGMENT_C_GAIN)
+    return render(identity).ground_hex, _nearest_cube_hex(oklch_to_hex(wanted))
 
 
 @lru_cache(maxsize=512)
